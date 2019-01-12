@@ -6,7 +6,7 @@ Teaching an AI to play the game peg solitaire using deep Q reinforcement learnin
 
 The game is played by jumping pieces over other pieces to an empty spot, thereby 'eating' the piece that was jumped over and removing it from the game. The aim is to 'eat' all but one piece from the board. More info here: https://www.wikiwand.com/en/Peg_solitaire
 
-The name in the file, Remain One, is a direct translation from the Portuguese name of the game.
+The name in the file, Remain One, is a direct translation from the Portuguese name of the game, as a joke.
 
 The files are organised like this:
 1. NeuralNet.py: implements a simple fully-connected neural network class, used for the deep learning aspect of the project;
