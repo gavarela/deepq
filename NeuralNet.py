@@ -8,6 +8,9 @@
 
 import numpy as np
 
+import json
+import sys
+
 
 ## Activation Functions
 ## ~~~~~~~~~~~~~~~~~~~~
@@ -327,30 +330,55 @@ class NeuralNet(object):
         return self.predictions
     
     def accuracy(self, y, X = None):
+        
         try:
-            self.predictions
+            self.testaccuracy = np.mean(self.predictions == y)
         except NameError:
             assert X is not None, 'Missing arg X or predict first.'
             self.testaccuracy = np.mean(self.predict(X) == y)
-        else:
-            self.testaccuracy = np.mean(self.predictions == y)
+        
         return self.testaccuracy
     
     def cost(self, y, X = None):
+        
         try:
-            self.predictions
-        except NameError:
-            if X == None:
-                print('Missing arg X or predict first.')
-                return None
-            self.testcost = self.cost.func(self.predict(X), y)
-            return self.testcost
-        else:
             self.testcost = self.cost.func(self.predictions, y)
-            return self.testcost
+        except NameError:
+            assert X is not None, 'Missing arg X or predict first.'
+            self.testcost = self.cost.func(self.predict(X), y)
+        
+        return self.testcost
     
     def save(self, filename):
-        pass # for now...
+        ''' Save network to json file. '''
+        
+        data = {'shape': self.shape,
+                'activation': self.act.__name__,
+                'cost': self.cost.__name__,
+                'weights': [w.tolist() for w in self.W],
+                'biases': [b.tolist() for b in self.B]}
+        
+        file = open(filename, "w")
+        json.dump(data, file)
+        file.close()
+    
+    @classmethod
+    def load(cls, filename):
+        ''' Load a network instance from json file. '''
+        
+        file = open(filename, "r")
+        data = json.load(file)
+        file.close()
+        
+        act_func = getattr(sys.modules[__name__], data['activation'])
+        cost_func = getattr(sys.modules[__name__], data['cost'])
+        
+        network = Network(data['shape'], act_func = act_func, cost_func = cost_func)
+        
+        network.W = [np.array(w) for w in data['weights']]
+        network.B = [np.array(b) for b in data['biases']]
+        
+        return network
     
     
                 
