@@ -180,6 +180,7 @@ class NeuralNet(object):
         
         self.Z = [np.tile(self.B[0], (num_samples, 1)) + \
             np.matmul(X, self.W[0])]
+        
         self.A = [self.act.func(self.Z[0])]
         
         for l in range(1, self.num_layers - 1):
@@ -191,7 +192,7 @@ class NeuralNet(object):
     
     #@staticmethod
     def backward_prop(self, X, y):
-        ''' Backward propagates errors in network given X, y. '''
+        ''' Backward propagates errors in network given X, y. Need to change so it doesn't do the if condition inside the loop each time. Should speed it up a tiny bit. '''
         
         batch_size = len(X)
         
@@ -203,14 +204,16 @@ class NeuralNet(object):
         for l in range(1, self.num_layers-1):
             
             dA = [np.matmul(dZ[-l], self.W[-l].transpose())]                          + dA
+            
             dZ = [dA[-l-1] * self.act.derivative(self.Z[-l-1])]                       + dZ
-
+            
             if l < self.num_layers - 2:
                 dW = [(1/batch_size) * np.matmul(self.A[-l-2].transpose(), dZ[-l-1])] + dW
             elif l == self.num_layers - 2:
                 dW = [(1/batch_size) * np.matmul(X.transpose(), dZ[-l-1])]            + dW
-
+                
             dB = [(1/batch_size) * np.sum(dZ[-l-1], axis = 0)]                        + dB
+            
         
         return (dW, dB)
     
@@ -285,18 +288,19 @@ class NeuralNet(object):
                 # Forward and backward prop
                 self.forward_prop(batchX)
                 dW, dB = self.backward_prop(batchX, batchy)
-                
+    
                 # Update weights
                 vW = [mu*vw - eta*dw for vw, dw in zip(vW, dW)]
                 vB = [mu*vb - eta*db for vb, db in zip(vB, dB)]
                 
-                self.W = [w - (lmbda*eta/n_samples)*self.reg(w) \
+                self.W = [w - (lmbda*eta/batch_size)*self.reg(w) \
                           + vw for w, vw in zip(self.W, vW)]
                 self.B = [b + vb for b, vb in zip(self.B, vB)]
                 
                 # Print if verbose
                 if verbose:
-                    if epoch % 1000 == 0:
+                    if epoch % verbose == 0:
+                        
                         loss = np.mean(np.square(self.A[-1] - batchy))
 
                         try:
@@ -318,34 +322,38 @@ class NeuralNet(object):
                     
         return None # Something?
     
-    def predict(self, X):
+    def predict(self, X, output_type = 'as is'):
         
         output = self.forward_prop(X)
         
-        if self.shape[-1] == 1:
-            self.predictions = np.array(1 * (output > 0.5)).reshape(len(output), 1)
-        else:
+        if output_type == 'argmax':
             self.predictions = np.argmax(output, axis = 1).reshape(-1, 1)
-            
+        
+        elif output_type == 'binary':
+            self.predictions = 1 * (output > 0.5)
+        
+        elif output_type == 'as is':
+            self.predictions = output
+        
         return self.predictions
     
-    def accuracy(self, y, X = None):
+    def accuracy(self, y, X = None, output_type = 'as is'):
         
         try:
             self.testaccuracy = np.mean(self.predictions == y)
         except NameError:
             assert X is not None, 'Missing arg X or predict first.'
-            self.testaccuracy = np.mean(self.predict(X) == y)
+            self.testaccuracy = np.mean(self.predict(X, output_type) == y)
         
         return self.testaccuracy
     
-    def cost(self, y, X = None):
+    def cost(self, y, X = None, output_type = 'as is'):
         
         try:
             self.testcost = self.cost.func(self.predictions, y)
         except NameError:
             assert X is not None, 'Missing arg X or predict first.'
-            self.testcost = self.cost.func(self.predict(X), y)
+            self.testcost = self.cost.func(self.predict(X, output_type = 'as is'), y)
         
         return self.testcost
     
@@ -373,7 +381,7 @@ class NeuralNet(object):
         act_func = getattr(sys.modules[__name__], data['activation'])
         cost_func = getattr(sys.modules[__name__], data['cost'])
         
-        network = Network(data['shape'], act_func = act_func, cost_func = cost_func)
+        network = NeuralNet(data['shape'], act_func = act_func, cost_func = cost_func)
         
         network.W = [np.array(w) for w in data['weights']]
         network.B = [np.array(b) for b in data['biases']]

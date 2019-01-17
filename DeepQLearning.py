@@ -66,13 +66,19 @@ class QPlayer(object):
         self.network = NN.NeuralNet(sizes = sizes,
                                     act_func = act_func,
                                     cost_func = cost_func)
+    
+    def load_network(self, filename):
         
-    def get_move(self, state, random_move, legal_moves):
+        self.network = NN.NeuralNet.load(filename)
+        self.num_inputs = self.network.shape[0]
+        self.num_outputs = self.network.shape[-1]
+        
+    def get_move(self, state, random_move):#, legal_moves):
         ''' Selects random move if random_move == True. Otherwise, runs network to select move with the highest expected (Q-)value. '''
        
         # Random choice
         if random_move:
-            return random.choice(legal_moves)
+            return random.choice(range(self.num_outputs))
         
         # From network
         preds = self.network.forward_prop([state])[0]
@@ -107,6 +113,7 @@ class QPlayer(object):
         
         return self.memory[ind]
     
+    ### NOT USED ANYMORE
     @staticmethod
     def states_as_string(states, many = True):
         ''' For use in train. Converts states as list to state as string, eg. [1, 1, 0, ...] -> '110...'. '''
@@ -122,8 +129,53 @@ class QPlayer(object):
         else:
             
             return np.array([QPlayer.states_as_string(state, False) for state in states])
+    
+    ### NOT USED ANYMORE - FASTER VERSION BELOW
+    def old_train(self, batch_size, learn_rate, 
+              use_last = True, reg = None, reg_rate = None):
+        ''' Trains the network on a batch drawn randomly from memory. If use_last == True, assures the latest training example is included in the batch. '''
         
+        # Gen batch for training
+        if (batch_size == 1 or len(self.memory) == 1) and use_last:
+            batch = np.array([self.memory[-1]])
+        elif use_last:
+            batch = np.random.permutation(self.memory[:-1])[:batch_size-1]
+            batch = np.append(batch, [self.memory[-1]], axis = 0)
+        else:
+            batch = np.random.permutation(self.memory)[:batch_size]
         
+        batch = batch.transpose()
+        
+        # Get training examples
+        examples = np.array(list(batch[0]))
+        
+        # Gen 'labels' for training examples in batch
+        # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash
+        string_new_states = self.states_as_string(batch[3], many = True)
+        targets = self.network.forward_prop(examples).transpose()
+        
+        for new_state in set(tuple(x) for x in batch[3]):
+            
+            string_new_state = self.states_as_string(new_state, False)
+            
+            new_prediction = self.network.forward_prop([list(new_state)])
+            max_new_pred = np.max(new_prediction[0])
+            
+            for i in range(targets.shape[0]):
+                
+                targets[i] = targets[i] + \
+                             (string_new_states == string_new_state) * \
+                             (batch[1] == i) * \
+                             (batch[2] + (batch[4] == False) * self.disc_rate * max_new_pred - targets[i])
+        
+        targets = targets.transpose()
+        
+        # Given batch of training examples and targets to train, train
+        self.network.train(X = examples, y = targets,
+                           epochs = 1, batch_size = -1,
+                           eta = learn_rate,
+                           reg = reg, lmbda = reg_rate)
+
     def train(self, batch_size, learn_rate, 
               use_last = True, reg = None, reg_rate = None):
         ''' Trains the network on a batch drawn randomly from memory. If use_last == True, assures the latest training example is included in the batch. '''
@@ -137,40 +189,27 @@ class QPlayer(object):
         else:
             batch = np.random.permutation(self.memory)[:batch_size]
         
-        # Gen 'labels' for training examples in batch
-        # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash
-        batch = batch.transpose()
+        # Training examples
+        examples = np.array(list(batch[:, 0]))
         
-        string_new_states = self.states_as_string(batch[3], batch_size > 1)
+        # Update targets for training examples in batch
+        targets = self.network.forward_prop(examples)
         
-        targets = self.network.forward_prop(np.array(list(batch[0]))).transpose()
-        
-        for new_state in set(tuple(x) for x in batch[3]):
+        for u, unit in enumerate(batch):
             
-            string_new_state = self.states_as_string(new_state, False)
+            # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash
             
-            new_prediction = self.network.forward_prop([list(new_state)])
-            max_new_pred = max(new_prediction[0])
+            new_pred = self.network.forward_prop([unit[0]])
+            max_new_pred = np.max(new_pred)
             
-            for i in range(targets.shape[0]):
-                                
-                targets[i] = targets[i] + \
-                             (string_new_states == string_new_state) * \
-                             (batch[1] == i) * \
-                             (batch[2] + (batch[4] == False) * self.disc_rate * max_new_pred - targets[i])
+            targets[u, unit[1]] = unit[2] + \
+                (not unit[4]) * self.disc_rate * max_new_pred
         
-        targets = targets.transpose()
-        
-        # Given batch of training examples and targets to train, train
-        examples = np.array(list(batch[0]))
-        
+        # Given examples and targets, train
         self.network.train(X = examples, y = targets,
                            epochs = 1, batch_size = -1,
                            eta = learn_rate,
                            reg = reg, lmbda = reg_rate)
-        
-        
-    
 
 
 ## RL routine
@@ -180,11 +219,14 @@ class RLRoutine(object):
     ''' A class for the Reinforcement learning routine - just a wrapper of a QPlayer and a ComputerGame. Stores the agent and history of games as attributes and has two methods: one for learning and one for playing (in a way humans can visualise). '''
     
     def __init__(self, epsilon, disc_rate, max_memory_len,
-                 sizes, act_func = NN.Sigmoid, cost_func = NN.CrossEntropyCost):
+                 sizes, act_func = NN.Sigmoid, cost_func = NN.CrossEntropyCost, filename = None):
         
         # Initialise QPlayer class instance
         self.qplayer = QPlayer(max_memory_len, disc_rate)
-        self.qplayer.start_network(sizes, act_func, cost_func)
+        if filename is None:
+            self.qplayer.start_network(sizes, act_func, cost_func)
+        else:
+            self.qplayer.load_network(filename)
         
         # Store parameters
         self.epsilon = epsilon          # Function of the epoch
@@ -212,6 +254,8 @@ class RLRoutine(object):
         self.cgame_class = cgame_class
         self.cgames = []
         
+        first = True
+        
         print('Starting learning.')
         
         game = 0
@@ -224,56 +268,75 @@ class RLRoutine(object):
             
             # First turn
             state = cgame.get_state()
-            action = int(self.cgame_class.get_inp_out_dims()[1]/2) # <- d4   #self.qplayer.get_move(state, (random.random() < self.epsilon(counter)), range(self.cgame_class.get_inp_out_dims()[1]))
+            action = self.cgame_class.get_inp_out_dims()[1]//2 # <- d4   
+                #self.qplayer.get_move(state, (random.random() < self.epsilon(counter)))
+                
             reward = cgame.first_turn(action)
             new_state = cgame.get_state()
             
             self.qplayer.store(state, action, reward, new_state, cgame.crash(),
                                memory_props[reward])
             
-            self.qplayer.train(batch_size = 1, use_last = True, 
-                               learn_rate = learn_rate, 
-                               reg = reg, reg_rate = reg_rate)
+#            self.qplayer.train(batch_size = 1, use_last = True, 
+#                               learn_rate = learn_rate, 
+#                               reg = reg, reg_rate = reg_rate)
             
             turns = 1
-            counter = 1
+            counter = 0
             
             # Following turns
             while not cgame.crash():
                 
                 state = new_state
-                action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)), cgame.legal_moves())
+                action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)))#, cgame.legal_moves())
+                
+                counter += 1
                 
                 while action not in cgame.legal_moves():
-                    reward = cgame.turn(action)
+                    
+                    reward = cgame.turn(action, crash_if_invalid = False)
                     self.qplayer.store(state, action, reward, state, True,
                                        memory_props[reward])
-                    self.qplayer.train(batch_size = 1, use_last = True,
-                                       learn_rate = learn_rate, 
-                                       reg = reg, reg_rate = reg_rate)
                     
-                    action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)), cgame.legal_moves())
+                    if len(self.qplayer.memory) == self.qplayer.max_memory_len:
+                        self.qplayer.train(batch_size = -1 if first else 1, use_last = True,
+                                           learn_rate = learn_rate, 
+                                           reg = reg, reg_rate = reg_rate)
+                        if first:
+                            print('  Did first train.')
+                            first = False
+                    
+                    action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)))#, cgame.legal_moves())
                     
                     counter += 1
                 
                 reward = cgame.turn(action)
+                
                 new_state = cgame.get_state()
                 
                 self.qplayer.store(state, action, reward, new_state, cgame.crash(),
                                    memory_props[reward])
                 
-                self.qplayer.train(batch_size = 1, use_last = True, 
-                                   learn_rate = learn_rate, 
-                                   reg = reg, reg_rate = reg_rate)
+                if len(self.qplayer.memory) == self.qplayer.max_memory_len:
+                    self.qplayer.train(batch_size = -1 if first else 1, use_last = True, 
+                                       learn_rate = learn_rate, 
+                                       reg = reg, reg_rate = reg_rate)
+                    if first:
+                        print('  Did first train.')
+                        first = False
                 
                 turns += 1
                 
             # Another train? With larger batch
-            self.qplayer.train(batch_size = batch_size(game+1), use_last = True, 
-                               learn_rate = learn_rate, 
-                               reg = reg, reg_rate = reg_rate)
+            if len(self.qplayer.memory) == self.qplayer.max_memory_len:
+                self.qplayer.train(batch_size = -1 if first else batch_size(game+1), use_last = True, 
+                                   learn_rate = learn_rate, 
+                                   reg = reg, reg_rate = reg_rate)
+                if first:
+                    print('  Did first train.')
+                    first = False
             
-            print('Game', game, 'turns', turns - 1, 'counter', counter)
+            print('Game', game, 'turns', turns - 1, 'counter', counter)#, 'mean n of tries', np.mean(try_list), 'of', len(try_list))
             
 #            if verbose:
 #                if game % verbose == 0:

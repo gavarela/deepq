@@ -252,11 +252,14 @@ class ComputerGame(Game):
         
         return 1
     
-    def turn(self, inpt):
+    def turn(self, inpt, crash_if_invalid = True):
         ''' Takes in input. Tries to do corresponding move. If valid, does it and returns reward of 1, if not returns reward of 0. '''
         
         valid = self.computer_moves[inpt].do()
         self.history.append(inpt)
+        
+        if not crash_if_invalid and not valid:
+            self.crashed = False
         
         return -10 + 11*int(valid)
     

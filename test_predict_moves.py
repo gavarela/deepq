@@ -52,7 +52,7 @@ mc = MoveChecker()
 moves = []
 l = len(states)
 for i, state in enumerate(states):
-    if (i+1)%500 == 0: print(' - Getting legal moves for state', i+1, 'of', l)
+    if (i+1)%1000 == 0: print(' - Getting legal moves for state', i+1, 'of', l)
     mc.set_state(state)
     moves.append(mc.legal_moves())
 moves = np.array(moves)
@@ -81,7 +81,7 @@ print('\nDone. Training network...')
 n_in = trainX.shape[1]
 n_out = trainy.shape[1]
 
-param_shape = [n_in, 100, 100, n_out]
+param_shape = [n_in, 200, 200, n_out]
 param_cost = NN.CrossEntropyCost
 param_act = NN.Sigmoid
 param_weights = 'XHWeights'
@@ -89,10 +89,10 @@ param_weights = 'XHWeights'
 param_epochs = 200
 param_bsize = 70
 param_ltype = 'SGD'
-param_lrate = 0.02
+param_lrate = 0.15
 param_momrate = None
 param_regtype = 'L2'
-param_regrate = 100
+param_regrate = 0.12
 
 param_verbose = 20
 
@@ -130,4 +130,7 @@ print(' - Regularisation:          ', param_regtype)
 print(' - Regularisation parameter:', param_regrate)
 
 print('\nPrediction accuracy:', acc, '\n')
+
+# Save network
+net.save('valid_moves_net.json')
 
