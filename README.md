@@ -14,7 +14,7 @@ The files are organised like this:
 3. DeepQLearning.py: implements a deep Q learning player/agent and a class with a reinforcement learning routine;
 4. RemainOneAI.py: the script that brings it all together and runs the program.
 
-Note: still need to tune the training hyperparameters.
+Note: not working yet.
 
 
 ## Reinforcement Learning and Deep Q Learning
