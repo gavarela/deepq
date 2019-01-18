@@ -21,13 +21,13 @@ param_sizes = [n_in, 200, 200, n_out]
 param_act_func = NN.Sigmoid
 param_cost_func = NN.CrossEntropyCost
 
-param_epsilon = lambda t, g: 1.15 - 1/(1 + np.exp(-(g/10 - 10))) 
+param_epsilon = lambda g: 1.15 - 1/(1 + np.exp(-(g/100 - 22))) 
                              # 1 if t > g//250 + 1 else 0.15
 param_disc_rate = 0.7
 param_max_memory_len = 4000
 param_memory_props = {1: 1/2, -10: 1/2}
 
-param_games = 250
+param_games = 10000
 param_batch_size = lambda x: int(max(1.5*x, 150))
 param_learn_rate = 0.12
 param_reg = None # 'L2'

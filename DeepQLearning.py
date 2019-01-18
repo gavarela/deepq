@@ -47,12 +47,9 @@ import NeuralNet as NN
 class QPlayer(object):
     ''' Implements things like memory, the deep Q network and training on a batch from memory. '''
     
-    def __init__(self, max_memory_len, disc_rate):
+    def __init__(self, disc_rate, max_memory_len, memory_props):
         
-        self.memory = []
-        self.memory_counts = {}
-        self.max_memory_len = max_memory_len
-        
+        self.memory = Memory(max_memory_len, memory_props)
         self.disc_rate = disc_rate
     
     ''' I should think of what's the best way to program the network itself because the input (board configuration) will have a lot of structure and symmetries that could be expoited, e.g. spatial relation of pieces in board (suggests CNN) and the rotational symmetry of the board (playing it in any orientation is the same - suggests an analogue of CNN where instead of convolving we convolve four rotations of the board? or something like that...). '''
@@ -91,25 +88,14 @@ class QPlayer(object):
         
         return int(move)
     
-    def store(self, state, action, reward, new_state, crash,
-              memory_prop = None):
+    def store(self, state, action, reward, new_state, crash):
         
-        self.memory.append([state, action, reward, new_state, crash])
-        try:
-            self.memory_counts[reward] += 1
-        except KeyError:
-            self.memory_counts[reward] = 1
-        
-        if self.memory_counts[reward] > memory_prop * self.max_memory_len:
-            i = 0
-            while self.memory[i][2] != reward:
-                i += 1
-            del self.memory[i]
+        self.memory.append([state, action, reward, new_state, crash], reward)
         
     def retrieve(self, ind = None):
         
         if ind is None:
-            return self.memory
+            return self.memory.memory
         
         return self.memory[ind]
     
@@ -212,17 +198,65 @@ class QPlayer(object):
                            reg = reg, lmbda = reg_rate)
 
 
+
+## Memory
+## ~~~~~~
+
+class Memory(object):
+    
+    def __init__(self, max_len, proportions = None):
+        
+        self.memory = []
+        self.types = []
+        
+        self.max_len = max_len
+        self.last_item = None
+        
+        self.props = proportions
+        self.counts = {}
+        
+    def is_full(self):
+        
+        return len(self.memory) == self.max_len
+    
+    def __getitem__(self, i):
+        
+        return self.memory[i]
+    
+    def __len__(self):
+        
+        return len(self.memory)
+    
+    def append(self, item, item_type = None):
+        
+        self.memory.append(item)
+        self.types.append(item_type)
+        
+        self.last_item = item
+        self.counts[item_type] = self.counts.get(item_type, 0) + 1
+        
+        if self.counts[item_type] > self.props[item_type] * self.max_len:
+            inds = np.random.permutation(range(len(self.memory)-1))
+            i = 0
+            while self.types[inds[i]] != item_type:
+                i += 1
+            del self.memory[inds[i]]
+            del self.types[inds[i]]
+
+
 ## RL routine
 ## ~~~~~~~~~~
 
 class RLRoutine(object):
     ''' A class for the Reinforcement learning routine - just a wrapper of a QPlayer and a ComputerGame. Stores the agent and history of games as attributes and has two methods: one for learning and one for playing (in a way humans can visualise). '''
     
-    def __init__(self, epsilon, disc_rate, max_memory_len,
-                 sizes, act_func = NN.Sigmoid, cost_func = NN.CrossEntropyCost, filename = None):
+    def __init__(self, epsilon, 
+                 disc_rate, max_memory_len, memory_props,
+                 sizes, act_func = NN.Sigmoid, cost_func = NN.CrossEntropyCost, 
+                 filename = None):
         
         # Initialise QPlayer class instance
-        self.qplayer = QPlayer(max_memory_len, disc_rate)
+        self.qplayer = QPlayer(disc_rate, max_memory_len, memory_props)
         if filename is None:
             self.qplayer.start_network(sizes, act_func, cost_func)
         else:
@@ -232,10 +266,10 @@ class RLRoutine(object):
         self.epsilon = epsilon          # Function of the epoch
         self.disc_rate = disc_rate
         self.max_memory_len = max_memory_len
+        self.memory_props = memory_props
         
     def learn(self, cgame_class,
               games, batch_size, learn_rate, 
-              memory_props, 
               reg = None, reg_rate = None,
               verbose = False):
         ''' Whole RL routine for learning. 
@@ -269,13 +303,12 @@ class RLRoutine(object):
             # First turn
             state = cgame.get_state()
             action = self.cgame_class.get_inp_out_dims()[1]//2 # <- d4   
-                #self.qplayer.get_move(state, (random.random() < self.epsilon(counter)))
+                #self.qplayer.get_move(state, (random.random() < self.epsilon(game)))
                 
             reward = cgame.first_turn(action)
             new_state = cgame.get_state()
             
-            self.qplayer.store(state, action, reward, new_state, cgame.crash(),
-                               memory_props[reward])
+            self.qplayer.store(state, action, reward, new_state, cgame.crash())
             
 #            self.qplayer.train(batch_size = 1, use_last = True, 
 #                               learn_rate = learn_rate, 
@@ -288,25 +321,20 @@ class RLRoutine(object):
             while not cgame.crash():
                 
                 state = new_state
-                action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)))#, cgame.legal_moves())
+                action = self.qplayer.get_move(state, (random.random() < self.epsilon(game)))#, cgame.legal_moves())
                 
                 counter += 1
                 
                 while action not in cgame.legal_moves():
                     
                     reward = cgame.turn(action, crash_if_invalid = False)
-                    self.qplayer.store(state, action, reward, state, True,
-                                       memory_props[reward])
+                    self.qplayer.store(state, action, reward, state, True)
                     
-                    if len(self.qplayer.memory) == self.qplayer.max_memory_len:
-                        self.qplayer.train(batch_size = -1 if first else 1, use_last = True,
-                                           learn_rate = learn_rate, 
-                                           reg = reg, reg_rate = reg_rate)
-                        if first:
-                            print('  Did first train.')
-                            first = False
+                    self.qplayer.train(batch_size = 1, use_last = True,
+                                       learn_rate = learn_rate, 
+                                       reg = reg, reg_rate = reg_rate)
                     
-                    action = self.qplayer.get_move(state, (random.random() < self.epsilon(counter, game)))#, cgame.legal_moves())
+                    action = self.qplayer.get_move(state, (random.random() < self.epsilon(game)))#, cgame.legal_moves())
                     
                     counter += 1
                 
@@ -314,33 +342,21 @@ class RLRoutine(object):
                 
                 new_state = cgame.get_state()
                 
-                self.qplayer.store(state, action, reward, new_state, cgame.crash(),
-                                   memory_props[reward])
+                self.qplayer.store(state, action, reward, new_state, cgame.crash())
                 
-                if len(self.qplayer.memory) == self.qplayer.max_memory_len:
-                    self.qplayer.train(batch_size = -1 if first else 1, use_last = True, 
-                                       learn_rate = learn_rate, 
-                                       reg = reg, reg_rate = reg_rate)
-                    if first:
-                        print('  Did first train.')
-                        first = False
+                self.qplayer.train(batch_size = 1, use_last = True, 
+                                   learn_rate = learn_rate, 
+                                   reg = reg, reg_rate = reg_rate)
                 
                 turns += 1
                 
             # Another train? With larger batch
-            if len(self.qplayer.memory) == self.qplayer.max_memory_len:
-                self.qplayer.train(batch_size = -1 if first else batch_size(game+1), use_last = True, 
-                                   learn_rate = learn_rate, 
-                                   reg = reg, reg_rate = reg_rate)
-                if first:
-                    print('  Did first train.')
-                    first = False
+            self.qplayer.train(batch_size = batch_size, use_last = True, 
+                               learn_rate = learn_rate, 
+                               reg = reg, reg_rate = reg_rate)
             
-            print('Game', game, 'turns', turns - 1, 'counter', counter)#, 'mean n of tries', np.mean(try_list), 'of', len(try_list))
-            
-#            if verbose:
-#                if game % verbose == 0:
-#                    print('Game ' + str(game) + ', done in ' + str(len(cgame.history)) + ' turns.')
+            print('Game', game, 'turns', turns - 1, 'counter', counter,
+                  'and epsilon', self.epsilon(game))
             
             game += 1
     
