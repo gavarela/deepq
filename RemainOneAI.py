@@ -43,7 +43,8 @@ param_filename = 'valid_moves_net.json'
 # RL routine
 RL = DQL.RLRoutine(param_epsilon, 
                    param_disc_rate,
-                   param_max_memory_len, param_memory_props,
+                   param_max_memory_len, 
+                   param_memory_props,
                    param_shape)
 
 
@@ -109,7 +110,7 @@ print('\nFitting network to data...', end = ' ')
 start_fit = time.time()
 try:
     
-    #MLPRegressor
+    # MLPRegressor
     
     RL.qplayer.network.fit(X = trainX, y = trainy)
     end_fit = time.time()

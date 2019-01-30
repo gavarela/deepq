@@ -127,7 +127,9 @@ class QPlayer(object):
             '''
         
         # Gen batch for training
-        if (batch_size == 1 or len(self.memory) == 1) and use_last:
+        if batch_size == -1:
+            batch = np.array(self.memory.memory)
+        elif (batch_size == 1 or len(self.memory) == 1) and use_last:
             batch = np.array([self.memory[-1]])
         elif use_last:
             batch = np.random.permutation(self.memory[:-1])[:batch_size-1]
@@ -226,23 +228,30 @@ class Memory(object):
         
         return len(self.memory)
     
-    def append(self, item, item_type = None):
+    def append(self, items, item_types = None, single_item = True):
         
         # Add to memory
-        self.memory.append(item)
+        if single_item:
+            items = [items]
+            item_types = [item_types]
+            
+        for item in items:
+            self.memory.append(item)
         
         if self.proportions is not None:
             
-            self.types.append(item_type)
-            self.counts[item_type] = self.counts.get(item_type, 0) + 1
-
-            if self.counts[item_type] > self.proportions[item_type] * self.max_len:
-                inds = np.random.permutation(range(len(self)-1))
-                i = 0
-                while self.types[inds[i]] != item_type:
-                    i += 1
-                del self.memory[inds[i]]
-                del self.types[inds[i]]
+            for item_type in item_types:
+                self.types.append(item_type)
+                self.counts[item_type] = self.counts.get(item_type, 0) + 1
+            
+            for item_type in set(item_types):
+                if self.counts[item_type] > self.proportions[item_type] * self.max_len:
+                    inds = np.random.permutation(range(len(self)-1))
+                    i = 0
+                    while self.types[inds[i]] != item_type:
+                        i += 1
+                    del self.memory[inds[i]]
+                    del self.types[inds[i]]
     
     def clear(self):
         
@@ -263,12 +272,10 @@ class RLRoutine(object):
         
         # Initialise QPlayer class instance
         self.qplayer = QPlayer(disc_rate, max_memory_len, memory_props)
-#        if filename is None:
-#                self.qplayer.start_network(shape)
-#            else:
-#                self.qplayer.load_network(filename)
-        
-        self.qplayer.start_network(shape)
+        if filename is None:
+                self.qplayer.start_network(shape)
+        else:
+            self.qplayer.load_network(filename)
     
         # Store parameters
         self.epsilon = epsilon          # Function of the epoch
@@ -276,7 +283,7 @@ class RLRoutine(object):
         self.max_memory_len = max_memory_len
         self.memory_props = memory_props
     
-    def play_cgame(self, epsilon):
+    def play_cgame(self, qplayer, epsilon):
         ''' Play one game with QPlayer. Chooses action following epsilon greedy policy each turn and stores each turn in memory. 
             Returns tuple containing the ComputerGame instance, the number of turns played and the number of illegal moves chosen. '''
         
@@ -300,7 +307,7 @@ class RLRoutine(object):
             legal = False
             while not legal:
                 
-                action = self.qplayer.get_move(
+                action = qplayer.get_move(
                             state,
                             random.random() < epsilon,
                             cgame.legal_moves()
@@ -317,12 +324,12 @@ class RLRoutine(object):
                 new_state = cgame.get_state()
                 
                 # Store in temp memory
-                memory.append([state, action, reward, new_state, cgame.crash() if legal else True, legal_moves])
+                qplayer.store(state, action, reward, new_state, cgame.crash() if legal else True, legal_moves)
                 
             turns += 1
         
         # Return cgame (has history)
-        return (cgame, turns, illegal_choices, memory)
+        return (qplayer, cgame, turns, illegal_choices)
             
     def learn(self, cgame_class,
               epochs, batch_size, l_rate, 
@@ -354,6 +361,14 @@ class RLRoutine(object):
         self.det_turn_list = []
         self.det_illegal_move_list = []
         
+        self.qplayers = []
+        for i in range(n_processes):
+            self.qplayers.append(QPlayer(self.qplayer.disc_rate, 
+                                         self.qplayer.memory.max_len,
+                                         self.qplayer.memory.proportions))
+            
+            self.qplayers[-1].start_network(self.qplayer.network.shape)
+        
         start_time = time.time()
         
         epoch = 0
@@ -362,26 +377,30 @@ class RLRoutine(object):
             print('\nDoing epoch', epoch, end = ':\n')
             
             # Play n_processor games in parallel
-#            pool = mp.Pool(n_processes)
-#            games = [pool.apply(self.play_cgame, 
-#                                args=(self.epsilon(epoch),)) \
-#                        for x in range(n_processes)]
-#            
-#            output = [p.get() for p in results]
-            
             pool = ProcessPool(n_processes)
-            output = pool.map(self.play_cgame, 
+            output = pool.map(self.play_cgame, self.qplayers,
                               [self.epsilon(epoch)] * n_processes)
+            
+            self.qplayers = []
             for o in output:
-                self.cgame_list.append(o[0])
-                self.turn_list.append(o[1])
-                self.illegal_move_list.append(o[2])
-                for item in o[3]:
-                    self.qplayer.memory.append(item)
+                self.qplayers.append(o[0])
+                self.cgame_list.append(o[1])
+                self.turn_list.append(o[2])
+                self.illegal_move_list.append(o[3])
             
-            print('  Mean turns: %0.1f, with %0.1f illegal moves' %(np.mean([o[1] for o in output]), np.mean([o[2] for o in output])))
+            print('  Mean turns: %0.1f, with %0.1f illegal moves' %(np.mean([o[2] for o in output]), np.mean([o[3] for o in output])))
             
-            # Train
+            # Train player networks and the main network
+            for qplayer in self.qplayers:
+                
+                qplayer.train(batch_size = -1,
+                              l_rate = l_rate,
+                              reg_rate = reg_rate,
+                              mom_rate = mom_rate)
+                self.qplayer.memory.append(qplayer.memory.memory,
+                                           single_item = False)
+                qplayer.memory.clear()
+            
             self.qplayer.train(batch_size = batch_size, 
                                use_last = True, 
                                l_rate = l_rate, 
@@ -394,7 +413,7 @@ class RLRoutine(object):
             if epoch % verbose == 0:
                 
                 verbose_time = time.time()
-                cgame, turns, illegal_moves, _ = self.play_cgame(-1)
+                _, cgame, turns, illegal_moves = self.play_cgame(self.qplayer, -1)
                 
                 print('\nDeterministic game, %i mins into training:\n  Played %i turns with %i illegal choices made.' % ((verbose_time - start_time)/60, turns, illegal_moves))
                 
