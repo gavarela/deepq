@@ -8,31 +8,54 @@ import json, sys
 class WillyNet(object):
     ''' Simple neural network based off of the one I made for Will. '''
     
-    def __init__(self, shape, problem):
-        ''' Initialises weights and biases using Xavier-He initialisation. Prepares rest of network. 
+    def __init__(self, shape, problem, hidden_act = 'relu', weights = 'XavierHe'):
+        ''' Initialises weights and biases using Xavier-He initialisation. Prepares rest of network depending on problem (regression or classification), hidden activation and weight initialisation options. 
             h_act is hidden layer activation function, here ReLU;
             dh_act is its derivative;
             o_act is the output layer activation function, here linear;
-            cost is the cost function. 
-            Will make these options in a future version. problem is an unused argument for now. '''
+            cost is the cost function.
+            '''
         
         self.shape = shape
         self.n_layers = len(shape)
         
         # Weight initialisation
-        self.W = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (shape[i], shape[i+1])) \
-             for i in range(self.n_layers - 1)]
+        if weights == 'XavierHe':
+            
+            self.W = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (shape[i], shape[i+1])) \
+                 for i in range(self.n_layers - 1)]
 
-        self.B = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (1, shape[i+1])) \
-             for i in range(self.n_layers - 1)]
+            self.B = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (1, shape[i+1])) \
+                 for i in range(self.n_layers - 1)]
+        
+        elif weights == 'He':
+            
+            self.W = [np.random.normal(0, np.sqrt(2/shape[i]), (shape[i], shape[i+1])) \
+                 for i in range(self.n_layers - 1)]
+
+            self.B = [np.random.normal(0, np.sqrt(2/shape[i]), (1, shape[i+1])) \
+                 for i in range(self.n_layers - 1)]
         
         # Hidden layers
-        self.h_act = lambda z: z * (z>0)
-        self.dh_act = lambda z: 1 * (z>0)
+        if hidden_act == 'relu':
+            self.h_act = lambda z: z * (z>0)
+            self.dh_act = lambda z: 1 * (z>0)
+        elif hidden_act == 'sigmoid':
+            self.h_act = lambda z: 1 / (1 + np.exp(-z))
+            self.dh_act = lambda z: self.h_act(z) * (1 - self.h_act(z))
         
         # Output layer and cost
-        self.o_act = lambda z: z
-        self.cost = lambda a, y: 0.5 * np.mean((y - a)**2)
+        if problem == 'regression':
+            self.o_act = lambda z: z
+            self.cost = lambda a, y: 0.5 * np.mean((y - a)**2)
+        elif problem == 'classification':
+            self.o_act = lambda z: 1 / (1 + np.exp(-z))
+            self.cost = -np.mean(np.nan_to_num(y*np.log(a)) + np.nan_to_num((1-y)*np.log(1-a)))
+        
+        #elif problem == 'softmax':
+            #self.o_act = lambda z: np.exp(-z)/np.sum(np.exp(-z), axis = 1)
+            #self.cost = lambda a, y: -np.sum(np.log(a*y), axis = 1)
+            # NEED TO CHECK THE ABOVE BEFORE USING!!!
         
     def forward_prop(self, X):
         ''' Given X, performs a forward propagation. Calculates activation of each layer up to output layer. '''
