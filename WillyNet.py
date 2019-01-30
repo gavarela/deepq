@@ -6,70 +6,40 @@ import json, sys
 
 # NN functions
 class WillyNet(object):
-    ''' Simple neural network based off of the one I made for Will. I changed it a bit to extend it but I'm using this because it leads to fewer warning messages which piss me off. '''
+    ''' Simple neural network based off of the one I made for Will. '''
     
-    def __init__(self, shape, problem = 'classification', hidden_act = 'relu', weights = 'He'):
+    def __init__(self, shape, problem):
         ''' Initialises weights and biases using Xavier-He initialisation. Prepares rest of network. 
-            act is activation function,
-            dact is its derivative,
-            dc is the derivative of the cost funtion with respect to the network outputs. '''
+            h_act is hidden layer activation function, here ReLU;
+            dh_act is its derivative;
+            o_act is the output layer activation function, here linear;
+            cost is the cost function. 
+            Will make these options in a future version. problem is an unused argument for now. '''
         
         self.shape = shape
         self.n_layers = len(shape)
         
         # Weight initialisation
-        if weights == 'XavierHe':
-            
-            self.W = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (shape[i], shape[i+1])) \
-                 for i in range(self.n_layers - 1)]
+        self.W = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (shape[i], shape[i+1])) \
+             for i in range(self.n_layers - 1)]
 
-            self.B = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (1, shape[i+1])) \
-                 for i in range(self.n_layers - 1)]
+        self.B = [np.random.normal(0, np.sqrt(2 / (shape[i] + shape[i+1])), (1, shape[i+1])) \
+             for i in range(self.n_layers - 1)]
         
-        elif weights == 'He':
-            
-            self.W = [np.random.normal(0, np.sqrt(2/shape[i]), (shape[i], shape[i+1])) \
-                 for i in range(self.n_layers - 1)]
-
-            self.B = [np.random.normal(0, np.sqrt(2/shape[i]), (1, shape[i+1])) \
-                 for i in range(self.n_layers - 1)]
+        # Hidden layers
+        self.h_act = lambda z: z * (z>0)
+        self.dh_act = lambda z: 1 * (z>0)
         
-        # Define hidden activations
-        if hidden_act == 'relu':
-            self.h_act = lambda z: z * (z>0)
-            self.dh_act = lambda z: 1 * (z>0)
-        
-        elif hidden_act == 'sigmoid':
-            self.h_act = lambda z: 1 / (1 + np.exp(-z))
-            self.dh_act = lambda z: self.h_act(z) * (1 - self.h_act(z))
-            
-        elif hidden_act == 'linear':
-            self.h_act = lambda x: x
-            self.dh_act = lambda x: 1
-        
-            # Could add more...
-        
-        # Define outputactivations and costs
-        if problem == 'classification':
-            
-            # Sigmoid and cross-entropy
-            self.o_act = lambda z: 1 / (1 + np.exp(-z))
-            #self.cost = lambda y, a = - np.nanmean(y*np.nan_to_num(np.log(a)) + (1-y)*np.nan_to_num(np.log(1-a)))
-        
-        elif problem == 'regression':
-            
-            # Linear
-            self.o_act = lambda z: z
-            self.cost = lambda y, a: 0.5 * np.mean((y - a)**2)
-            
-            # Could add 'softmax': softmax with log cost?
+        # Output layer and cost
+        self.o_act = lambda z: z
+        self.cost = lambda a, y: 0.5 * np.mean((y - a)**2)
         
     def forward_prop(self, X):
         ''' Given X, performs a forward propagation. Calculates activation of each layer up to output layer. '''
         
         X = np.array(X)
         n_samples = X.shape[0]
-
+        
         self.Z = [np.tile(self.B[0], (n_samples, 1)) + (X @ self.W[0])]
         self.A = [self.h_act(self.Z[0])]
 
@@ -85,9 +55,7 @@ class WillyNet(object):
     def backward_prop(self, X, y):
         ''' Backward propagates the errors given the batch of training labels, y. 
             dZ is dC/dZ and dW and dB are dC/dW and dC/dB. 
-            Specific to ReLU hidden activations and either:
-            1. sigmoid output activations and cross-entropy cost (classification);
-            2. linear (no) output activation and qudratic cost (regression). '''
+            Specific to cross-entropy cost and ReLU hidden activations and sigmoid output activations. '''
         
         n_samples = X.shape[0]
         
@@ -101,7 +69,7 @@ class WillyNet(object):
 
         # Work backwards through other layers
         for l in range(1, self.n_layers-1):
-
+            
             dZ = [(dZ[-l] @ self.W[-l].transpose()) * self.dh_act(self.Z[-l-1])] + dZ
 
             dW = [XA[-l-2].transpose() @ dZ[-l-1]] + dW
