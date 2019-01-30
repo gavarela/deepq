@@ -35,11 +35,15 @@ Add in:
 
 '''
 
-import types
-import random
-import numpy as np
+import types, random, numpy as np, math
+import WillyNet as WN
+from sklearn.neural_network import MLPClassifier, MLPRegressor
 
-import NeuralNet as NN
+import time, multiprocessing as mp
+from pathos.multiprocessing import ProcessPool
+
+use_WillyNet = True
+
 
 ## Q-learning player
 ## ~~~~~~~~~~~~~~~~~
@@ -52,45 +56,57 @@ class QPlayer(object):
         self.memory = Memory(max_memory_len, memory_props)
         self.disc_rate = disc_rate
     
-    ''' I should think of what's the best way to program the network itself because the input (board configuration) will have a lot of structure and symmetries that could be expoited, e.g. spatial relation of pieces in board (suggests CNN) and the rotational symmetry of the board (playing it in any orientation is the same - suggests an analogue of CNN where instead of convolving we convolve four rotations of the board? or something like that...). '''
-    def start_network(self, sizes, 
-                      act_func = NN.Sigmoid, 
-                      cost_func = NN.CrossEntropyCost):
+    def start_network(self, shape):
         
-        self.num_inputs = sizes[0]
-        self.num_outputs = sizes[-1]
+        self.num_inputs = shape[0]
+        self.num_outputs = shape[-1]
         
-        self.network = NN.NeuralNet(sizes = sizes,
-                                    act_func = act_func,
-                                    cost_func = cost_func)
-    
+        if use_WillyNet:
+            self.network = WN.WillyNet(shape, 
+                                       problem = 'regression')
+        else:
+            self.network = MLPRegressor(
+                        hidden_layer_sizes = tuple(shape[1:-2]),
+                        activation = 'relu',
+                        solver = 'sgd',
+                        learning_rate = 'constant',
+                        learning_rate_init = 0.001,
+                        batch_size = 150,
+                        alpha = 0.0001)
+        
     def load_network(self, filename):
         
-        self.network = NN.NeuralNet.load(filename)
+        self.rule_network = WN.WillyNet.load(filename)
         self.num_inputs = self.network.shape[0]
         self.num_outputs = self.network.shape[-1]
         
-    def get_move(self, state, random_move):#, legal_moves):
+    def get_move(self, state, random_state, legal_moves):
         ''' Selects random move if random_move == True. Otherwise, runs network to select move with the highest expected (Q-)value. '''
-       
-        # Random choice
-        if random_move:
-            return random.choice(range(self.num_outputs))
         
-        # From network
-        preds = self.network.forward_prop([state])[0]
+        # No randomness
+        if not random_state:
+            
+            if use_WillyNet:
+                preds = self.network.forward_prop([state])[0]
+            else:
+                preds = self.network.predict([state])[0]
+            
+            choices = np.zeros(self.num_outputs)
+            for move in legal_moves:
+                choices[move] = 1
+            
+            assert type(preds) == np.ndarray and type(choices) == np.ndarray
+            
+            return np.argmax(preds * choices)
+            
+        # Random choice based on predictions
+        else:
+            
+            return np.random.choice(legal_moves)
+            
+    def store(self, state, action, reward, new_state, crash, legal_moves):
         
-        move = np.argmax(preds)
-        
-        #while move not in legal_moves:    
-            #preds = np.delete(preds, move)
-            #move = np.argmax(preds)
-        
-        return int(move)
-    
-    def store(self, state, action, reward, new_state, crash):
-        
-        self.memory.append([state, action, reward, new_state, crash], reward)
+        self.memory.append([state, action, reward, new_state, crash, legal_moves], reward)
         
     def retrieve(self, ind = None):
         
@@ -99,72 +115,16 @@ class QPlayer(object):
         
         return self.memory[ind]
     
-    ### NOT USED ANYMORE
-    @staticmethod
-    def states_as_string(states, many = True):
-        ''' For use in train. Converts states as list to state as string, eg. [1, 1, 0, ...] -> '110...'. '''
-        
-        if not many:
-            
-            string_state = ''
-            for i in states:
-                string_state += str(i)
-
-            return string_state
-        
-        else:
-            
-            return np.array([QPlayer.states_as_string(state, False) for state in states])
-    
-    ### NOT USED ANYMORE - FASTER VERSION BELOW
-    def old_train(self, batch_size, learn_rate, 
-              use_last = True, reg = None, reg_rate = None):
-        ''' Trains the network on a batch drawn randomly from memory. If use_last == True, assures the latest training example is included in the batch. '''
-        
-        # Gen batch for training
-        if (batch_size == 1 or len(self.memory) == 1) and use_last:
-            batch = np.array([self.memory[-1]])
-        elif use_last:
-            batch = np.random.permutation(self.memory[:-1])[:batch_size-1]
-            batch = np.append(batch, [self.memory[-1]], axis = 0)
-        else:
-            batch = np.random.permutation(self.memory)[:batch_size]
-        
-        batch = batch.transpose()
-        
-        # Get training examples
-        examples = np.array(list(batch[0]))
-        
-        # Gen 'labels' for training examples in batch
-        # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash
-        string_new_states = self.states_as_string(batch[3], many = True)
-        targets = self.network.forward_prop(examples).transpose()
-        
-        for new_state in set(tuple(x) for x in batch[3]):
-            
-            string_new_state = self.states_as_string(new_state, False)
-            
-            new_prediction = self.network.forward_prop([list(new_state)])
-            max_new_pred = np.max(new_prediction[0])
-            
-            for i in range(targets.shape[0]):
-                
-                targets[i] = targets[i] + \
-                             (string_new_states == string_new_state) * \
-                             (batch[1] == i) * \
-                             (batch[2] + (batch[4] == False) * self.disc_rate * max_new_pred - targets[i])
-        
-        targets = targets.transpose()
-        
-        # Given batch of training examples and targets to train, train
-        self.network.train(X = examples, y = targets,
-                           epochs = 1, batch_size = -1,
-                           eta = learn_rate,
-                           reg = reg, lmbda = reg_rate)
-
-    def train(self, batch_size, learn_rate, 
-              use_last = True, reg = None, reg_rate = None):
-        ''' Trains the network on a batch drawn randomly from memory. If use_last == True, assures the latest training example is included in the batch. '''
+    def train(self, batch_size, l_rate, 
+              use_last = True, reg_rate = 0, mom_rate = 0,
+              verbose = False):
+        ''' Trains the network on a batch drawn randomly from memory. If use_last == True, assures the latest training example is included in the batch. 
+           Prepares batch, rowwise, by:
+            - running network on s' and on s;
+            - use as target the result from running on s with the following corrections:
+              a) Q-value corresponding to a -> r + y * max_a'{Q(s', a')};
+              b) Q-value corresponding to illegal moves -> 0.
+            '''
         
         # Gen batch for training
         if (batch_size == 1 or len(self.memory) == 1) and use_last:
@@ -179,24 +139,65 @@ class QPlayer(object):
         examples = np.array(list(batch[:, 0]))
         
         # Update targets for training examples in batch
-        targets = self.network.forward_prop(examples)
+        if use_WillyNet:
+                targets = self.network.forward_prop(examples)
+                # legal_moves = self.rule_network.predict(examples, 'binary')
+        else:
+            targets = self.network.predict(examples)
+        
+        old_fp = np.copy(targets)
         
         for u, unit in enumerate(batch):
             
-            # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash
+            # Inds: 0 - state, 1 - action, 2 - reward, 3 - new state, 4 - crash, 5 - legal moves
             
-            new_pred = self.network.forward_prop([unit[0]])
+            if use_WillyNet:
+                new_pred = self.network.forward_prop([unit[0]])
+            else:
+                new_pred = self.network.predict([unit[0]])
+            
             max_new_pred = np.max(new_pred)
             
             targets[u, unit[1]] = unit[2] + \
                 (not unit[4]) * self.disc_rate * max_new_pred
-        
+            
+            legal_moves = np.array([1 if i in unit[5] else 0 for i in range(self.num_outputs)])
+            targets[u] *= legal_moves
+            
         # Given examples and targets, train
-        self.network.train(X = examples, y = targets,
-                           epochs = 1, batch_size = -1,
-                           eta = learn_rate,
-                           reg = reg, lmbda = reg_rate)
-
+        if use_WillyNet:
+                self.network.train(X = examples, y = targets,
+                           num_iterations = 1, batch_size = -1,
+                           l_rate = l_rate,
+                           reg_rate = reg_rate, mom_rate = mom_rate)
+        else:
+            self.network.fit(examples, targets)
+    
+        # Print stuff
+        if use_WillyNet:
+            new_fp = self.network.forward_prop(examples)
+        else:
+            new_fp = self.network.predict(examples)
+        
+        if verbose:
+            
+            print('  RMSE:', np.mean((old_fp - targets)**2)**0.5, 
+                  '->', np.mean((old_fp - targets)**2)**0.5)
+            
+            if use_WillyNet:
+                print('  Cost:', self.network.cost(old_fp, targets),
+                        '->', self.network.cost(new_fp, targets))
+            
+#            # If nan, print a lot of things to diagnose problems
+#            if math.isnan(np.mean(new_fp - old_fp)):
+#                
+#                print('\n\n\n', \
+#                      '  PROBLEM! nan difference between new and old predictions!\n\n')
+#                
+#                while True:
+#                    command = input('Problem! Input your command (inside train) (input "break" to continue):\n  ')
+#                    exec(command)
+                    
 
 
 ## Memory
@@ -207,12 +208,10 @@ class Memory(object):
     def __init__(self, max_len, proportions = None):
         
         self.memory = []
-        self.types = []
-        
         self.max_len = max_len
-        self.last_item = None
         
-        self.props = proportions
+        self.proportions = proportions
+        self.types = []
         self.counts = {}
         
     def is_full(self):
@@ -229,19 +228,27 @@ class Memory(object):
     
     def append(self, item, item_type = None):
         
+        # Add to memory
         self.memory.append(item)
-        self.types.append(item_type)
         
-        self.last_item = item
-        self.counts[item_type] = self.counts.get(item_type, 0) + 1
+        if self.proportions is not None:
+            
+            self.types.append(item_type)
+            self.counts[item_type] = self.counts.get(item_type, 0) + 1
+
+            if self.counts[item_type] > self.proportions[item_type] * self.max_len:
+                inds = np.random.permutation(range(len(self)-1))
+                i = 0
+                while self.types[inds[i]] != item_type:
+                    i += 1
+                del self.memory[inds[i]]
+                del self.types[inds[i]]
+    
+    def clear(self):
         
-        if self.counts[item_type] > self.props[item_type] * self.max_len:
-            inds = np.random.permutation(range(len(self.memory)-1))
-            i = 0
-            while self.types[inds[i]] != item_type:
-                i += 1
-            del self.memory[inds[i]]
-            del self.types[inds[i]]
+        self.memory = []
+        self.types = []
+        self.counts = {}
 
 
 ## RL routine
@@ -250,224 +257,150 @@ class Memory(object):
 class RLRoutine(object):
     ''' A class for the Reinforcement learning routine - just a wrapper of a QPlayer and a ComputerGame. Stores the agent and history of games as attributes and has two methods: one for learning and one for playing (in a way humans can visualise). '''
     
-    def __init__(self, epsilon, 
-                 disc_rate, max_memory_len, memory_props,
-                 sizes, act_func = NN.Sigmoid, cost_func = NN.CrossEntropyCost, 
-                 filename = None):
+    def __init__(self, epsilon, disc_rate, 
+                 max_memory_len, memory_props,
+                 shape, filename = None):
         
         # Initialise QPlayer class instance
         self.qplayer = QPlayer(disc_rate, max_memory_len, memory_props)
-        if filename is None:
-            self.qplayer.start_network(sizes, act_func, cost_func)
-        else:
-            self.qplayer.load_network(filename)
+#        if filename is None:
+#                self.qplayer.start_network(shape)
+#            else:
+#                self.qplayer.load_network(filename)
         
+        self.qplayer.start_network(shape)
+    
         # Store parameters
         self.epsilon = epsilon          # Function of the epoch
         self.disc_rate = disc_rate
         self.max_memory_len = max_memory_len
         self.memory_props = memory_props
+    
+    def play_cgame(self, epsilon):
+        ''' Play one game with QPlayer. Chooses action following epsilon greedy policy each turn and stores each turn in memory. 
+            Returns tuple containing the ComputerGame instance, the number of turns played and the number of illegal moves chosen. '''
         
-    def learn(self, cgame_class,
-              games, batch_size, learn_rate, 
-              reg = None, reg_rate = None,
-              verbose = False):
-        ''' Whole RL routine for learning. 
-            1. Run game. At each turn:
-               a) Run a lottery to see if action will be random or the actor's network;
-               b) Play with that action;
-               c) Store old state, action, reward, new state and whether the game crashed in memory: (s, a, r, s', c);
-               d) Train network on a small batch generated by sampling from memory and, rowwise:
-                   - running network on s' (store that) and on s;
-                   - using as target the result from running on s with the Q-value corresponding to a updated to r + y * max_a'{Q(s', a')};
-            2. Train network on larger sample of memory using the same method as above;
-            3. Go back to step 1. Run game a set number of times to allow network to learn.
-        '''
+        cgame = self.cgame_class()
         
-        assert isinstance(cgame_class, type), 'Argument cgame must be a class (not instance).'
-        self.cgame_class = cgame_class
-        self.cgames = []
+        # First turn - remove d4
+        action = self.cgame_class.get_inp_out_dims()[1]//2
+        cgame.first_turn(action)
         
-        first = True
+        new_state = cgame.get_state()
         
-        print('Starting learning.')
-        
-        game = 0
-        counter = 0
-        while game < games:
+        # Loop over next turns
+        memory = []
+        turns = 0
+        illegal_choices = 0
+        while not cgame.crash():
             
-            # Start new game
-            self.cgames.append(self.cgame_class())
-            cgame = self.cgames[-1]
+            # Get action (repeat choice until legal)
+            state = new_state
             
-            # First turn
-            state = cgame.get_state()
-            action = self.cgame_class.get_inp_out_dims()[1]//2 # <- d4   
-                #self.qplayer.get_move(state, (random.random() < self.epsilon(game)))
+            legal = False
+            while not legal:
                 
-            reward = cgame.first_turn(action)
-            new_state = cgame.get_state()
-            
-            self.qplayer.store(state, action, reward, new_state, cgame.crash())
-            
-#            self.qplayer.train(batch_size = 1, use_last = True, 
-#                               learn_rate = learn_rate, 
-#                               reg = reg, reg_rate = reg_rate)
-            
-            turns = 1
-            counter = 0
-            
-            # Following turns
-            while not cgame.crash():
+                action = self.qplayer.get_move(
+                            state,
+                            random.random() < epsilon,
+                            cgame.legal_moves()
+                         )
                 
-                state = new_state
-                action = self.qplayer.get_move(state, (random.random() < self.epsilon(game)))#, cgame.legal_moves())
+                # Was it legal?
+                legal_moves = cgame.legal_moves()
+                legal = action in legal_moves
                 
-                counter += 1
+                illegal_choices += int(not legal)
                 
-                while action not in cgame.legal_moves():
-                    
-                    reward = cgame.turn(action, crash_if_invalid = False)
-                    self.qplayer.store(state, action, reward, state, True)
-                    
-                    self.qplayer.train(batch_size = 1, use_last = True,
-                                       learn_rate = learn_rate, 
-                                       reg = reg, reg_rate = reg_rate)
-                    
-                    action = self.qplayer.get_move(state, (random.random() < self.epsilon(game)))#, cgame.legal_moves())
-                    
-                    counter += 1
-                
+                # Play turn
                 reward = cgame.turn(action)
-                
                 new_state = cgame.get_state()
                 
-                self.qplayer.store(state, action, reward, new_state, cgame.crash())
+                # Store in temp memory
+                memory.append([state, action, reward, new_state, cgame.crash() if legal else True, legal_moves])
                 
-                self.qplayer.train(batch_size = 1, use_last = True, 
-                                   learn_rate = learn_rate, 
-                                   reg = reg, reg_rate = reg_rate)
+            turns += 1
+        
+        # Return cgame (has history)
+        return (cgame, turns, illegal_choices, memory)
+            
+    def learn(self, cgame_class,
+              epochs, batch_size, l_rate, 
+              reg_rate = 0, mom_rate = 0,
+              verbose = False,
+              n_processes = None):
+        ''' Whole RL routine for learning. In a loop:
+            1. Run many games in parallel, storing actions in memory but not training.
+            2. Train on previous set of games played in parallel.
+            3. Every set number of iterations, play a game with no epsilon greedy policy to track progress.
+            '''
+        
+        # Handle arg: cgame_class
+        assert isinstance(cgame_class, type), 'Argument cgame_class must be a class (not instance).'
+        self.cgame_class = cgame_class
+        self.cgame_list = []
+        
+        # Handle arg: n_processes
+        if n_processes is None:
+            n_processes = mp.cpu_count() - 2
+        
+        # Handle arg: verbose
+        if verbose is None: verbose == np.Inf
+        
+        # Play games
+        self.turn_list = []
+        self.illegal_move_list = []
+        
+        self.det_turn_list = []
+        self.det_illegal_move_list = []
+        
+        start_time = time.time()
+        
+        epoch = 0
+        while epoch < epochs:
+            
+            print('\nDoing epoch', epoch, end = ':\n')
+            
+            # Play n_processor games in parallel
+#            pool = mp.Pool(n_processes)
+#            games = [pool.apply(self.play_cgame, 
+#                                args=(self.epsilon(epoch),)) \
+#                        for x in range(n_processes)]
+#            
+#            output = [p.get() for p in results]
+            
+            pool = ProcessPool(n_processes)
+            output = pool.map(self.play_cgame, 
+                              [self.epsilon(epoch)] * n_processes)
+            for o in output:
+                self.cgame_list.append(o[0])
+                self.turn_list.append(o[1])
+                self.illegal_move_list.append(o[2])
+                for item in o[3]:
+                    self.qplayer.memory.append(item)
+            
+            print('  Mean turns: %0.1f, with %0.1f illegal moves' %(np.mean([o[1] for o in output]), np.mean([o[2] for o in output])))
+            
+            # Train
+            self.qplayer.train(batch_size = batch_size, 
+                               use_last = True, 
+                               l_rate = l_rate, 
+                               reg_rate = reg_rate,
+                               mom_rate = mom_rate,
+                               verbose = True)
                 
-                turns += 1
+            #self.qplayer.memory.clear()
+            
+            if epoch % verbose == 0:
                 
-            # Another train? With larger batch
-            self.qplayer.train(batch_size = batch_size, use_last = True, 
-                               learn_rate = learn_rate, 
-                               reg = reg, reg_rate = reg_rate)
+                verbose_time = time.time()
+                cgame, turns, illegal_moves, _ = self.play_cgame(-1)
+                
+                print('\nDeterministic game, %i mins into training:\n  Played %i turns with %i illegal choices made.' % ((verbose_time - start_time)/60, turns, illegal_moves))
+                
+                self.det_turn_list.append(turns)
+                self.det_illegal_move_list.append(illegal_moves)
             
-            print('Game', game, 'turns', turns - 1, 'counter', counter,
-                  'and epsilon', self.epsilon(game))
+            epoch += 1
             
-            game += 1
-    
-    def play_new(self, hgame_class):
-        
-        assert isinstance(hgame_class, type), 'Argument cgame must be a class (not instance).'
-        self.hgame_class = hgame_class
-        hgame = self.hgame_class()
-        cgame = self.cgame_class()
-        
-        # Remove initial piece
-        game.clear_term()
-        print(self)
-        
-        time.sleep(0.5)
-        
-        new_state = hgame.get_state(
-                        hgame.first_turn(
-                            cgame.c_to_h_inpt(
-                                self.qplayer.get_move(
-                                    hgame.get_state()
-                                )
-                            )
-                        )
-                    )
-        
-        # Do other plays from there
-        while not hgame.crash():
             
-            self.hgame.clear_term()
-            print(self)
-            print('\n' + hgame.str_history())
-            
-            time.sleep(0.5)
-            
-            new_state = hgame.get_state(
-                            hgame.turn(
-                                cgame.c_to_h_inpt(
-                                    self.qplayer.get_move(
-                                        new_state
-                                    )
-                                )
-                            )
-                        )
-        
-        # Finish game
-        self.clear_term()
-        print(self)
-        
-        print('Pieces left:', len(self.pieces))
-        if len(hgame.pieces) == 1:
-            print('\n   Congratulations!\n')
-        else:
-            print('\n   Shame... Try again!\n')
-        print('\nHistory:\n' + self.str_history())
-        
-    def replay(self, hgame_class, game_ind):
-        ''' Play a game from memory. '''
-        
-        assert isinstance(hgame_class, type), 'Argument cgame must be a class (not instance).'
-        self.hgame_class = hgame
-        hgame = self.hgame_class()
-        cgame = self.cgame_class()
-        
-        # Remove initial piece
-        game.clear_term()
-        print(self)
-        
-        time.sleep(0.5)
-        
-        new_state = hgame.get_state(
-                        hgame.first_turn(
-                            cgame.c_to_h_inpt(
-                                self.cgames[game_ind].history[0]
-                            )
-                        )
-                    )
-        
-        # Do other plays from there
-        turn = 1
-        while not hgame.crash():
-            
-            self.hgame.clear_term()
-            print(self)
-            print('\n' + hgame.str_history())
-            
-            time.sleep(0.5)
-            
-            new_state = hgame.get_state(
-                            hgame.turn(
-                                cgame.c_to_h_inpt(
-                                    self.cgames[game_ind].history[turn]
-                                )
-                            )
-                        )
-            
-            turn += 1
-        
-        # Finish game
-        self.clear_term()
-        print(self)
-        
-        print('Pieces left:', len(self.pieces))
-        if len(hgame.pieces) == 1:
-            print('\n   Congratulations!\n')
-        else:
-            print('\n   Shame... Try again!\n')
-        print('\nHistory:\n' + self.str_history())
-        
-        pass
-        
-        
-        
-        

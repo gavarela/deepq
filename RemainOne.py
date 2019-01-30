@@ -246,13 +246,12 @@ class ComputerGame(Game):
     
     def first_turn(self, inpt):
         ''' Takes in input (int between 0 and 33*4-1) and deletes corresponding piece. Returns reward, which is always 1. '''
-        
         self.get_place(self.computer_moves[inpt].ind).get_piece().delete()
         self.history.append(inpt)
         
-        return 1
+        return 0
     
-    def turn(self, inpt, crash_if_invalid = True):
+    def turn(self, inpt, crash_if_invalid = False):
         ''' Takes in input. Tries to do corresponding move. If valid, does it and returns reward of 1, if not returns reward of 0. '''
         
         valid = self.computer_moves[inpt].do()
@@ -261,7 +260,10 @@ class ComputerGame(Game):
         if not crash_if_invalid and not valid:
             self.crashed = False
         
-        return -10 + 11*int(valid)
+        if len(self.legal_moves()) == 0:
+            return -5
+        
+        return 1 if valid else -1
     
     def legal_moves(self):
         ''' Returns list with indices corresponding to moves that are legal. '''
