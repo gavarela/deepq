@@ -39,6 +39,8 @@ So we'll let our player play the game, with random behaviour at first so it can 
 
 ## The Algorithm
 
+This is a description of an old version of the algorithm I'm using. Will update it...
+
 1. Initialise the class instances:
 
    a) The game (an environment which provides a state, takes in an action and returns a reward);
