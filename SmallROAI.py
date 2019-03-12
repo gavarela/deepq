@@ -24,7 +24,7 @@ from utils.DW import *
 
 print('\033[33m')
 print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-print('\n          Remain One AI       \n')
+print('\n          Small RO AI         \n')
 print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 print('\033[0m')
 
@@ -32,28 +32,31 @@ print('\033[0m')
 ## ~~~~~~~~~~~~~~~~~~~~~
 
 # Training parameters
-param_cgame_class = RO.ComputerGame
+param_cgame_class = SRO.ComputerGame
 param_player_class = VP.VPlayer
 
-param_epsilon = lambda x: 1.15 - 1/(1 + np.exp(-(x/40 - 22)))
+param_epsilon = lambda x: 1.15 - 1/(1 + np.exp(-(x/25 - 25)))
 param_disc_rate = 1
 param_max_memory_len = 1500
 
-param_epochs = 2000
-param_n_players = mp.cpu_count() - 2
-param_player_life = 5
+param_epochs = 1000
+param_n_players = mp.cpu_count() - 2 # <- 6
+param_player_life = 3
 param_train_players = True
 
 param_batch_size = 50
-param_l_rate = 0.00005
+param_l_rate = 0.000005
 param_mom_rate = 0.85
-param_reg_rate = 0.0001
+param_reg_rate = 0.0005
 
 param_use_keras = False
-param_conv_net = False
+param_conv_net = True
 
-param_verbose = 10          # Play deterministic game every 10 epochs
+param_verbose = 5         # Play deterministic game every x epochs
 param_filename = None
+
+param_save_every = 100
+param_savedir = 'saves'
 
 print('\033[32m\n')
 print('Parameters')
@@ -95,51 +98,57 @@ print('~~~~~~~~~~~~~~~~~~~~~~~~~~~')
 print('\033[0m')
 
 # Class to check legal moves
-class MoveChecker(RO.ComputerGame):
+class MoveChecker(SRO.ComputerGame):
     ''' Uses legal_moves() method, as well as a new one, to set the state as we want it. '''
 
     def set_state(self, state, twod = False):
         ''' Sets state (board) of game to the given state, using a 2d or 1d description of the state. '''
 
-        self.board = [[RO.WALL]*11 for _ in range(11)]
+        self.board = [[SRO.WALL]*8 for _ in range(8)]
 
         if twod:
-
+            
             for r, row in enumerate(state):
                 for c, slot in enumerate(row):
                     self.board[r+2][c+2] = slot
 
-            for inds in [(2, 2), (2, 7), (7, 2), (7, 7)]:
-                self.board[inds[0]][inds[1]]     = RO.WALL
-                self.board[inds[0]][inds[1]+1]   = RO.WALL
-                self.board[inds[0]+1][inds[1]]   = RO.WALL
-                self.board[inds[0]+1][inds[1]+1] = RO.WALL
-
-
         else:
 
             i = 0
-            for r in RO.ROW_RANGE:
-                for c in RO.COL_RANGE[r]:
+            for r in SRO.ROW_RANGE:
+                for c in SRO.COL_RANGE[r]:
                     self.board[r][c] = state[i]
                     i += 1
 
 # Generate dataset
 print('Making dataset of states and moves now.')
 
+in_dim, out_dim = param_cgame_class.get_inp_out_dims(param_conv_net, param_use_keras)
+
+print('  With in and out dims:', in_dim, out_dim)
+
 if param_conv_net:
     
-    states = np.random.choice([1, 0], (10000, 7, 7), p = [1/3, 2/3])
-    for state in states:
-        for inds in [(0, 0), (0, 5), (5, 0), (5, 5)]:
-            state[inds[0]  , inds[1]  ] = 0
-            state[inds[0]  , inds[1]+1] = 0
-            state[inds[0]+1, inds[1]  ] = 0
-            state[inds[0]+1, inds[1]+1] = 0
+    #shape = tuple([10000] + [s for s in in_dim])
+    shape = (10000, 4, 4)
+    states = np.random.choice([1, 0], shape, p = [1/3, 2/3])
+    
+    if param_cgame_class.__module__ == "game.RemainOne":
+        for state in states:
+            for inds in [(0, 0), (0, 5), (5, 0), (5, 5)]:
+                state[inds[0]  , inds[1]  ] = 2
+                state[inds[0]  , inds[1]+1] = 2
+                state[inds[0]+1, inds[1]  ] = 2
+                state[inds[0]+1, inds[1]+1] = 2
+                
+    elif param_cgame_class.__module__ == "game.SmallRO":
+        for state in states:
+            for inds in [(0, 0), (0, 3), (3, 0), (3, 3)]:
+                state[inds[0], inds[1]] = 2
 
 else:
 
-    states = np.random.choice([1, 0], (10000, 33))
+    states = np.random.choice([1, 0], (10000, in_dim))
 
 mc = MoveChecker()
 
@@ -151,20 +160,23 @@ for i, state in enumerate(states):
     moves.append(mc.legal_moves())
 moves = np.array(moves)
 
-if param_player_class == VP.VPlayer:
-    if param_conv_net:
-        rewards = moves.max(axis = 1)[:, None] / (states.sum(2).sum(1).reshape((-1, 1)) - 1)
-    else:
-        rewards = moves.max(axis = 1)[:, None] / (states.sum(1).reshape((-1, 1)) - 1)
-elif param_conv_net:
-    rewards = 1/(states.sum(2).sum(1).reshape((-1, 1)) - 1) * moves
+# Get rewards from num pieces in states and moves
+if param_conv_net:
+    n_pieces = (states==1).sum(2).sum(1).reshape((-1, 1))
 else:
-    rewards = 1/(states.sum(1).reshape((-1, 1)) - 1) * moves
+    n_pieces = (states==1).sum(1).reshape((-1, 1))
+
+if param_player_class == VP.VPlayer:
+    rewards = moves.max(axis = 1)[:, None]
+    denom = n_pieces - (n_pieces != 1).astype(int)
+    rewards = rewards / denom
+else:
+    rewards = 1/(n_pieces - 1*(n_pieces != 1)) * moves
 
 if param_conv_net and param_use_keras:
-    states = states.reshape((10000, 7, 7, 1))
+    states = states.reshape((10000, 4, 4, 1))
 elif param_conv_net:
-    states = states.reshape((10000, 1, 7, 7))
+    states = states.reshape((10000, 1, 4, 4))
 else:
     states = states.reshape((10000, -1))
 
@@ -186,18 +198,18 @@ print('\nIn our sample, mean number of valid moves is %0.1f and max is %0.1f.' %
 print('\nMean reward from legal moves: %0.3f,\nMean reward from all moves: %0.3f,\nMax and min rewards: %0.3f and %0.3f.' %(np.mean(moves.max(1)), np.mean(moves), np.max(moves), np.min(moves)))
 
 # Train
-print('\nTraining QPlayer network now...')
+print('\nTraining master network now...')
 start_time = time.time()
 
 RL.master.net_train(trainX, trainy,
-                    num_iterations = 50,
+                    num_iterations = 250,
                     batch_size = 70,
-                    l_rate = param_l_rate,
+                    l_rate = 0.005,
                     mom_rate = param_mom_rate,
                     reg_rate = param_reg_rate)
 
 end_time = time.time()
-print('  Done in', str(end_time - start_time) + ' secs.' if end_time - start_time < 60 else str(end_time - start_time)/60 + ' mins.')
+print('  Done in', str(end_time - start_time) + ' secs.' if end_time - start_time < 60 else str((end_time - start_time)/60) + ' mins.')
 
 cost = RL.master.net_cost(testX, testy)
 print('  RMSE on test set:', (cost)**0.5)
@@ -219,7 +231,9 @@ RL.learn(epochs = param_epochs,
          reg_rate = param_reg_rate,
          mom_rate = param_mom_rate,
          verbose = param_verbose,
-         n_players = param_n_players)
+         n_players = param_n_players,
+         save_every = param_save_every,
+         savedir = param_savedir)
 
 print('Trained. Saving...')
 filename = 'trained_RO_player'
@@ -234,13 +248,12 @@ json.dump(data, file)
 file.close()
 
 # Plot performance over time
-rand_turns = np.mean(np.array(RL.turn_list).reshape((-1, param_n_players)), 
-                     axis = 1)
+epoch_means = np.array(RL.turn_list).reshape((-1, param_n_players)).mean(axis = 1)
 
 fig, ax = plt.subplots()
 
-ax.plot(range(len(rand_turns)), RL.turnlist, 'k.', markersize = 1, label = 'Training games')
-ax.plot(np.array(range(len(RL.det_turn_list)))*param_verbose, RL.det_turn_list, 'r-', label = 'Testing games')
+ax.plot(range(len(epoch_means)), epoch_means, 'k.', markersize = 1, label = 'Training games')
+ax.plot(np.arange(len(RL.det_turn_list))*param_verbose, RL.det_turn_list, 'r-', markersize = 1, label = 'Testing games')
 
 ax.set_title('AI Performance')
 ax.set_xlabel('Epoch')
