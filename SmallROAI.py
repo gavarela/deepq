@@ -235,13 +235,10 @@ RL.learn(epochs = param_epochs,
          save_every = param_save_every,
          savedir = param_savedir)
 
-print('Trained. Saving...')
-filename = 'trained_RO_player'
-filename += '.h5' if param_use_keras else '.json'
-RL.master.net_save(filename)
+print('Trained and saved.')
 
 # Save
-file = open('last_run.json', 'w')
+file = open('saves/last_run.json', 'w')
 data = {'turn_list': RL.turn_list,
         'det_turn_list': RL.det_turn_list}
 json.dump(data, file)
