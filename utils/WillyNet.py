@@ -217,8 +217,8 @@ class WillyNet(object):
     def copy(self):
         
         copy = WillyNet(self.shape, self.problem, self.hidden_act)
-        copy.W = self.W
-        copy.B = self.B
+        copy.W = self.W.copy()
+        copy.B = self.B.copy()
         
         return copy
         
