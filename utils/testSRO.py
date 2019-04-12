@@ -126,9 +126,8 @@ class Game(object):
             if self.n_pieces == 1:
                 self.won = True
             
+            self.check_legal_moves()
             return 1/self.n_pieces
-        
-        self.check_legal_moves()
         
         return 0
     
@@ -167,15 +166,18 @@ class QPlayer(QP_Base):
     
     def get_action(self, state, at_random, legal_moves):
         
-        if at_random:    
+        if at_random:
             ret = random.choice(np.where(legal_moves)[0])
+            #print(' - Random choice from', np.where(legal_moves)[0], 'was', ret)
             return ret
         
         else:
             ret = self.network.predict(np.array([state]))
-            #print(ret, end = ' -> \n')
+            print(ret, '\n', ret * legal_moves, '\n', ret[0, np.where(legal_moves)[0]])
+            input('KFJSHDKJFH')
+            #print(' - Find max of', ret, '*', legal_moves, end = '\n   -> ')
             ret *= legal_moves
-            #print(' ', ret, '->', ret[0].argmax())
+            #print(ret, ':', ret[0].argmax())
             return ret[0].argmax()
     
     def train(self, batch_size, l_rate, reg_rate, mom_rate):
@@ -246,6 +248,7 @@ def play_hgame(game):
         print_board(game)
         
         print('State is:', game.get_state())
+        #print('Legal moves are:', np.where(game.lms)[0])
         
         # Get move from input
         r, c, direc = 90, 0, UP
@@ -261,7 +264,11 @@ def play_hgame(game):
                      'left': LEFT, 'right': RIGHT}.get(inpt[3:], 0)
 
         # Do move
-        move_ind = Game._moves.index(((r, c), direc))
+        try:
+            move_ind = Game._moves.index(((r, c), direc))
+        except:
+            continue
+        
         print('\nMove with ind:', move_ind, 
               '\nReward:', game.turn(move_ind))
         
@@ -280,18 +287,30 @@ def play_hgame(game):
 ## Play game (computer)
 ## ~~~~~~~~~
 
-def play_cgame(game, player, epsilon):
+def play_cgame(game, player, epsilon, mts):
     
     game.restart()
     
+    hist = ''
     turns = 0
     new_state = game.get_state()
-    while not (game.crashed or game.won):
-
+    while (not (game.crashed or game.won)) and (turns < mts):
+        
+        #print('Turn', turns, 'w lms', game.lms)
+        #print_board(game)
+        
         # Play turn
         state = new_state
         lms = game.lms
-        action = player.get_action(state, 
+        try:
+            action = player.get_action(state, 
+                                   random.random() < epsilon,
+                                   lms)
+        except:
+            print_board(game)
+            print(turns, lms)
+            input('PE.')
+            action = player.get_action(state, 
                                    random.random() < epsilon,
                                    lms)
         reward = game.turn(action)
@@ -301,8 +320,11 @@ def play_cgame(game, player, epsilon):
         
         # Store in memory
         player.store(state, action, reward, new_state, game.crashed, lms)
+        
+        # History
+        hist += str(action) + ' '
     
-    return turns, game.won
+    return turns, game.won, hist
 
 
 ## Do RL
@@ -322,7 +344,7 @@ if __name__ == "__main__":
     ## ~~~~~~
 
     SHAPE = [12, 
-             200, 200, 
+             400, 400, 
              len(Game._moves)]
 
     DISC_RATE = 0.95
@@ -333,11 +355,12 @@ if __name__ == "__main__":
     REG_RATE = 0.0001
     MOM_RATE = 0.8
 
-    NUM_EPOCHS = 20000
+    NUM_EPOCHS = 500
     EPSILON = lambda i: 1.3 - i/NUM_EPOCHS
 
-    VERBOSE = 10
-    DET_VERBOSE = 20
+    VERBOSE = 1
+    DET_VERBOSE = 2
+    MAX_TRIES = 50
     
     
     game = Game(True)
@@ -389,11 +412,13 @@ if __name__ == "__main__":
     det_turnlist = []
     det_winlist = []
     
+    last_hist = ''
+    
     start_time = time.time()
     for epoch in range(NUM_EPOCHS):
         
         # Play a game
-        turns, won = play_cgame(game, player, EPSILON(epoch))
+        turns, won, _ = play_cgame(game, player, EPSILON(epoch), MAX_TRIES)
         
         turnlist.append(turns)
         winlist.append(game.won)
@@ -407,17 +432,25 @@ if __name__ == "__main__":
         # If right epoch, play deterministic game
         if (epoch+1) % DET_VERBOSE == 0:
             
-            turns, won = play_cgame(game, player, -1)
+            #print('\n\n\n\n\n\n\n\nDET GAME\n\n\n\n\n\n\n\n\n\n')
+            
+            turns, won, this_hist = play_cgame(game, player, -1, MAX_TRIES)
             
             print('\n  Played a deterministic game %i minutes into training.\n  Lasted %i turns and %s' \
                   %((time.time() - start_time) / 60,
                     turns,
                     'won!' if won else 'lost...')
                  )
-            print('    Player trains =', player.trains)
+            
+            print('    Hist:', this_hist)
+            if this_hist == last_hist:
+                print('           PLAYED THE SAME GAME!!!')
+            last_hist = this_hist
             
             det_turnlist.append(turns)
             det_winlist.append(won)
+            
+            #input('PE.')
     
     print('\nDone running RL! Saving...')
     
@@ -461,9 +494,9 @@ if __name__ == "__main__":
            'batch: %i \n' \
             % (L_RATE, REG_RATE, MOM_RATE, BATCH_SIZE)
 
-    ax.text(0.98, 0, text,
+    ax.text(0.98, 0.98, text,
             transform = ax.transAxes, fontsize = 9,
-            verticalalignment = 'bottom',
+            verticalalignment = 'top',
             horizontalalignment = 'right')
     
     plt.show(block = False)
