@@ -171,8 +171,13 @@ class QPlayer(object):
             targets.append(target)
             
         # Train
-        self.network.train(np.array(examples), np.array(targets),
-                           l_rate, 1, reg_rate, 1, mom_rate)
+        self.network.train(np.array(examples),
+                           np.array(targets),
+                           num_iterations = 1,
+                           batch_size = 1,
+                           learn_rate = l_rate,
+                           reg_rate = reg_rate,
+                           mom_rate = mom_rate)
 
 
 

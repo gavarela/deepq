@@ -19,7 +19,7 @@ from collections import deque
 
 from WillyNet import WillyNet
 
-from test2d import QPlayer as QP_Base, play_cgame
+from testSRO import QPlayer, play_cgame
 
 
 ## Game
@@ -35,23 +35,23 @@ LEFT  = ( 0, -1)
 RIGHT = ( 0,  1)
 DIRS = (RIGHT, LEFT, UP, DOWN)
 
-BOARD = [[2, 2,  2, 2, 2, 2,  2, 2],
-         [2, 2,  2, 2, 2, 2,  2, 2],
+BOARD = [[2, 2,  2, 2, 2, 2, 2,  2, 2],
+         [2, 2,  2, 2, 2, 2, 2,  2, 2],
 
-         [2, 2,  2, 1, 1, 2,  2, 2],
-         [2, 2,  1, 1, 1, 1,  2, 2],
-         [2, 2,  1, 1, 1, 1,  2, 2],
-         [2, 2,  2, 1, 1, 2,  2, 2],
-         
-         [2, 2,  2, 2, 2, 2,  2, 2],
-         [2, 2,  2, 2, 2, 2,  2, 2]
+         [2, 2,  2, 1, 1, 1, 2,  2, 2],
+         [2, 2,  1, 1, 1, 1, 1,  2, 2],
+         [2, 2,  1, 1, 1, 1, 1,  2, 2],
+         [2, 2,  2, 1, 1, 1, 2,  2, 2],
+
+         [2, 2,  2, 2, 2, 2, 2,  2, 2],
+         [2, 2,  2, 2, 2, 2, 2,  2, 2]
          ]
 
 ROW_RANGE = range(2, 5+1)
-COL_RANGE = {2: range(3, 4+1),
-             3: range(2, 5+1),
-             4: range(2, 5+1),
-             5: range(3, 4+1)}
+COL_RANGE = {2: range(3, 5+1),
+             3: range(2, 6+1),
+             4: range(2, 6+1),
+             5: range(3, 5+1)}
 
 VALID   = True  # Validity of moves
 INVALID = False
@@ -70,19 +70,19 @@ class Game(object):
     
     def __init__(self, do_first_turn = 'fixed'):
         
-        self.board = [[2, 2,  2, 2, 2, 2,  2, 2],
-                      [2, 2,  2, 2, 2, 2,  2, 2],
-
-                      [2, 2,  2, 1, 1, 2,  2, 2],
-                      [2, 2,  1, 1, 1, 1,  2, 2],
-                      [2, 2,  1, 1, 1, 1,  2, 2],
-                      [2, 2,  2, 1, 1, 2,  2, 2],
-
-                      [2, 2,  2, 2, 2, 2,  2, 2],
-                      [2, 2,  2, 2, 2, 2,  2, 2]
+        self.board = [[2, 2,  2, 2, 2, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 2, 2, 2,  2, 2],
+                      
+                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
+                      [2, 2,  1, 1, 1, 1, 1,  2, 2],
+                      [2, 2,  1, 1, 1, 1, 1,  2, 2],
+                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
+                      
+                      [2, 2,  2, 2, 2, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 2, 2, 2,  2, 2]
                       ]
         
-        self.n_pieces = 12
+        self.n_pieces = 16
         
         if do_first_turn not in ('no', 'fixed', 'rand'):
             raise ValueError('Argument `do_first_turn` must be one of "no", "fixed" or "rand".')
@@ -92,10 +92,9 @@ class Game(object):
             self.board[2][3] = FREE
             self.n_pieces -= 1
         elif self.do_first_turn == 'rand':
-            move = random.choice(((2, 3), (2, 4),
-                                  (3, 2), (4, 2),
-                                  (5, 3), (5, 4),
-                                  (3, 5), (4, 5)))
+            move = random.choice(((2, 3), (2, 5), 
+                                  (5, 3), (5, 5)))#,
+                                  #(3, 4), (4, 4)))
             self.board[move[0]][move[1]] = FREE
             self.n_pieces -= 1
         
@@ -163,83 +162,10 @@ class Game(object):
             self.__init__(self.do_first_turn)
 
 
-## (Q-)Player
-## ~~~~~~~~~~
-
-class QPlayer(QP_Base):
-    
-    def __init__(self, *args):
-        
-        super().__init__(*args)
-        self.trains = 0
-    
-    def get_action(self, state, at_random, legal_moves):
-        
-        lm_inds = np.where(legal_moves)[0]
-        
-        if at_random:
-            ret = random.choice(lm_inds)
-            #print(' - Random choice from', np.where(legal_moves)[0], 'was', ret)
-            return ret
-        
-        else:
-            ret = self.network.predict(np.array([state]))
-            #print(' - Find max of', ret, 'in inds', lm_inds, end = '\n   -> ')
-            ret = ret[0, lm_inds]
-            #print(ret, ':', ret.argmax() : lm_inds[ret.argmax()])
-            return lm_inds[ret.argmax()]
-    
-    def train(self, mem_batch, batch_prop, 
-              l_rate, reg_rate, mom_rate):
-        
-        self.trains += 1
-        
-        # Get batch
-        if mem_batch < len(self.memory):
-            batch = np.array(random.sample(self.memory, mem_batch))
-        else:
-            batch = self.memory
-        
-#        print('\n\n\n')
-#        print(type(batch))
-#        print(batch[:5])
-#        input('PE.')
-#        
-#        print('\n\nstates:')
-#        print(np.array(list(batch[:, 0])))
-#        input('PE.')
-        
-        # Build examples and targets
-        examples = []
-        targets = []
-        for state, action, reward, new_state, crashed, legal_moves in batch:
-            
-            # Build target
-            target = self.network.predict(np.array([state]))[0] 
-            target *= legal_moves
-            
-            target[action] = reward
-
-            if not crashed:
-                target[action] += self.disc_rate * max(self.network.predict(np.array([new_state]))[0])
-
-            # Append to lists
-            examples.append(state)
-            targets.append(target)
-            
-        # Train
-        self.network.train(np.array(examples),
-                           np.array(targets),
-                           num_iterations = int(1/batch_prop),
-                           batch_size = int(batch_prop*mem_batch),
-                           learn_rate = l_rate,
-                           reg_rate = reg_rate,
-                           mom_rate = mom_rate)
 
 
-
-## Play game (human)
-## ~~~~~~~~~
+## Print board (for hgame)
+## ~~~~~~~~~~~
 
 def print_board(game):
     
@@ -247,7 +173,7 @@ def print_board(game):
 
     pi = 0
     for ri, row in enumerate(game.board):
-        st += '  abcd  '[ri] + ' '
+        st += '  abcde  '[ri] + ' '
         for slot in row:
             st += ' '
             if slot == WALL:
@@ -257,7 +183,7 @@ def print_board(game):
                 pi += 1
         st += '\n'
 
-    st += '\n       1 2 3 4     \n\n'
+    st += '\n       1 2 3 4 5     \n\n'
 
     print(st)
 
@@ -308,48 +234,12 @@ def play_hgame(game):
     
     
     
-
-## Play game (computer)
-## ~~~~~~~~~
-
-def play_cgame(game, player, epsilon, rand_start = False):
-    
-    game.restart(rand_start)
-    
-    hist = ''
-    turns = 0
-    new_state = game.get_state()
-    while not (game.crashed or game.won):
-        
-        #print('Turn', turns, 'w lms', game.lms)
-        #print_board(game)
-        
-        # Play turn
-        state = new_state
-        lms = game.lms
-        action = player.get_action(state, 
-                                   random.random() < epsilon,
-                                   lms)
-        reward = game.turn(action)
-        new_state = game.get_state()
-
-        turns += 1
-        
-        # Store in memory
-        player.store(state, action, reward, new_state, game.crashed, lms)
-        
-        # History
-        hist += str(action) + ' '
-    
-    return turns, game.won, hist
-
-
 ## Do RL
 ## ~~~~~
 
 if __name__ == "__main__":
     
-    import os, time, matplotlib.pyplot as plt
+    import time, matplotlib.pyplot as plt
     
     print('\033[33m')
     print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
@@ -360,30 +250,31 @@ if __name__ == "__main__":
     ## Params
     ## ~~~~~~
 
-    SHAPE = [12, 
+    SHAPE = [16, 
              400, 400, 
              len(Game._moves)]
 
     DISC_RATE = 0.95
     MAX_MEM_LEN = 1000
 
-    MEM_BATCH = 70
-    TRAIN_BATCH = 10
+    MEM_BATCH = 150
+    TRAIN_BATCH = 1/5
     
     L_RATE = 0.02
     REG_RATE = 0.0001
     MOM_RATE = 0.8
 
-    NUM_EPOCHS = 500
+    NUM_EPOCHS = 3000
     EPSILON = lambda i: 1.3 - i/NUM_EPOCHS
 
-    VERBOSE = 1
-    DET_VERBOSE = 2
+    VERBOSE = 25
+    DET_VERBOSE = 50
     RAND_DETS = False
     
-    SAVE_DIR = 'testSRO_saves/new_batch/e%i_m%i_t%i' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH)
+    SAVE_DIR = 'testMRO_saves/batches/e%i_m%i_t%i' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH)
     if not os.path.isdir(SAVE_DIR):
         os.mkdir(SAVE_DIR)
+    
     
     game = Game()
     
@@ -409,7 +300,7 @@ if __name__ == "__main__":
           '\n - discount rate       =', DISC_RATE,
           '\n - max memory len      =', MAX_MEM_LEN, '\n',
           '\n - memory batch size   =', MEM_BATCH,
-          '\n - training batch size =', TRAIN_BATCH, '\n'
+          '\n - training batch size =', TRAIN_BATCH, '\n',
           '\n - learning rate       =', L_RATE,
           '\n - regularisation rate =', REG_RATE,
           '\n - momentum rate       =', MOM_RATE, '\n',
@@ -439,7 +330,7 @@ if __name__ == "__main__":
             print('\nEpoch %i: played %i turn(s) and %s' %(epoch+1, turns, 'won!' if won else 'lost...'))
         
         # Train
-        player.train(MEM_BATCH, TRAIN_BATCH,
+        player.train(MEM_BATCH, TRAIN_BATCH, 
                      L_RATE, REG_RATE, MOM_RATE)
         
         # If right epoch, play deterministic game
@@ -458,7 +349,7 @@ if __name__ == "__main__":
                 print('           PLAYED THE SAME GAME!!!')
             last_hist = this_hist
             
-            det_turnlist.append(11 - turns)
+            det_turnlist.append(15 - turns)
             det_winlist.append(won)
     
     end_time = time.time()
@@ -479,7 +370,8 @@ if __name__ == "__main__":
                        'REG_RATE': REG_RATE,
                        'MOM_RATE': MOM_RATE,
                        'NUM_EPOCHS': NUM_EPOCHS,
-                       'DET_VERBOSE': DET_VERBOSE}
+                       'DET_VERBOSE': DET_VERBOSE},
+            'time': end_time - start_time,
             }
     
     file = open(SAVE_DIR + '/results.json', 'w')
@@ -496,18 +388,18 @@ if __name__ == "__main__":
                 markersize = 1)
     
     ax.set_xlabel('Epoch')
-    ax.set_ylabel('Turns Played')
+    ax.set_ylabel('Pieces Left')
     ax.set_title('RL Progress')
     
-    text = 'learn  : %0.4f \n' \
-           'reg    : %0.4f \n' \
-           'mom    : %0.2f \n\n' \
+    text = 'learn: %0.4f \n' \
+           'reg: %0.4f \n' \
+           'mom: %0.2f \n\n' \
            'm batch: %i \n' \
            't batch: %i \n\n' \
-           'time   : %i secs' \
+           'time: %0.1f mins' \
             % (L_RATE, REG_RATE, MOM_RATE, 
                MEM_BATCH, TRAIN_BATCH,
-               end_time - start_time)
+               (end_time - start_time)/60)
 
     ax.text(0.98, 0.98, text,
             transform = ax.transAxes, fontsize = 9,
@@ -518,11 +410,7 @@ if __name__ == "__main__":
     plt.savefig(SAVE_DIR + '/progress.pdf')
     input('PE.')
     plt.close()
-            
         
-        
-        
-    
     
     
     
