@@ -198,35 +198,25 @@ class QPlayer(QP_Base):
         if mem_batch < len(self.memory):
             batch = np.array(random.sample(self.memory, mem_batch))
         else:
-            batch = self.memory
-        
-#        print('\n\n\n')
-#        print(type(batch))
-#        print(batch[:5])
-#        input('PE.')
-#        
-#        print('\n\nstates:')
-#        print(np.array(list(batch[:, 0])))
-#        input('PE.')
+            batch = np.array(self.memory)
         
         # Build examples and targets
-        examples = []
-        targets = []
-        for state, action, reward, new_state, crashed, legal_moves in batch:
-            
-            # Build target
-            target = self.network.predict(np.array([state]))[0] 
-            target *= legal_moves
-            
-            target[action] = reward
+        state, action, reward, new_state, crashed, legal_moves = \
+            [np.array(list(batch[:, i])).reshape((len(batch), -1)) for i in range(len(batch[0]))]
+        
+        examples = state
+        
+        targets = self.network.predict(state)
+        targets *= legal_moves
+        
+        action_inds = np.tile(range(targets.shape[1]), (targets.shape[0], 1)) == action
+        
+        targets += action_inds * (-targets + reward)
+        
+        next_Q = self.network.predict(new_state).max(axis = 1).reshape((len(batch), -1))
 
-            if not crashed:
-                target[action] += self.disc_rate * max(self.network.predict(np.array([new_state]))[0])
-
-            # Append to lists
-            examples.append(state)
-            targets.append(target)
-            
+        targets += action_inds * (1-crashed) * self.disc_rate * next_Q
+        
         # Train
         self.network.train(np.array(examples),
                            np.array(targets),
@@ -327,9 +317,11 @@ def play_cgame(game, player, epsilon, rand_start = False):
         # Play turn
         state = new_state
         lms = game.lms
+        
         action = player.get_action(state, 
                                    random.random() < epsilon,
                                    lms)
+        
         reward = game.turn(action)
         new_state = game.get_state()
 

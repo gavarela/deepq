@@ -260,7 +260,7 @@ if __name__ == "__main__":
     MEM_BATCH = 150
     TRAIN_BATCH = 1/5
     
-    L_RATE = 0.02
+    L_RATE = 0.5 # 0.02 * MEM_BATCH * TRAIN_BATCH
     REG_RATE = 0.0001
     MOM_RATE = 0.8
 
@@ -271,7 +271,7 @@ if __name__ == "__main__":
     DET_VERBOSE = 50
     RAND_DETS = False
     
-    SAVE_DIR = 'testMRO_saves/batches/e%i_m%i_t%i' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH)
+    SAVE_DIR = 'testMRO_saves/batches/e%i_m%i_t%i_l%s' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH * MEM_BATCH, str(L_RATE).replace('.', '-'))
     if not os.path.isdir(SAVE_DIR):
         os.mkdir(SAVE_DIR)
     

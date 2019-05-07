@@ -12,6 +12,11 @@ IF WANT TO CHANGE BOARD SIZE, FOLLOWING CHANGES NEED TO BE MADE:
  - In print_board: Indexing (abc and 123)
  - In det game bit: Score appended to det_turnlist
  - SHAPE of network
+ 
+
+MRO2 times:
+playing game is ~ 0.002s
+training is ~ 0.04s
 
 '''
 
@@ -330,7 +335,7 @@ def save_progress(turnlist, winlist,
                PARAMS['REG_RATE'],
                PARAMS['MOM_RATE'], 
                PARAMS['MEM_BATCH'],
-               PARAMS['TRAIN_BATCH'],
+               PARAMS['TRAIN_BATCH'] * PARAMS['MEM_BATCH'],
                time_elapsed/60)
 
     ax.text(0.98, 0.98, text,
@@ -362,16 +367,15 @@ if __name__ == "__main__":
     ## ~~~~~~
     
     PLAYER_CLASS = QPlayer
-    LOAD_FROM = None #'testMRO_saves/MRO2/batches/e50000_m150_t2'
+    LOAD_FROM = 'testMRO_saves/MRO2/batches/e50000_m150_t75_l0-5'
     
     if LOAD_FROM is not None:
         
         SAVE_DIR = LOAD_FROM
         
-        filename = os.listdir(LOAD_FROM + '/checkpoints')
-        filename.sort()
-        filename = filename[-1]
-        CURRENT_EPOCH = int([m for m in re.finditer('_(\d+)\.', filename)][0].group(1))
+        filenames = os.listdir(LOAD_FROM + '/checkpoints')
+        numbers = [int([m for m in re.finditer('_(\d+)\.', file)][0].group(1)) for file in filenames]
+        CURRENT_EPOCH = max(numbers)
         
         # Data file
         file = open(LOAD_FROM + '/checkpoints/results_%i.json' %CURRENT_EPOCH, 'r')
@@ -400,9 +404,8 @@ if __name__ == "__main__":
                   'MAX_MEM_LEN': 1000,
 
                   'MEM_BATCH': 150,
-                  'TRAIN_BATCH': 2,
+                  'TRAIN_BATCH': 1/2,
 
-                  'L_RATE': 0.02,
                   'REG_RATE': 0.0001,
                   'MOM_RATE': 0.8,
 
@@ -410,10 +413,13 @@ if __name__ == "__main__":
                   'DET_VERBOSE': 50,
                   'RAND_DETS': False}
         
-        SAVE_DIR = 'testMRO_saves/MRO2/batches/e%i_m%i_t%i' \
+        PARAMS['L_RATE'] = 0.5 # 0.02 * PARAMS['MEM_BATCH'] * PARAMS['TRAIN_BATCH']
+        
+        SAVE_DIR = 'testMRO_saves/MRO2/batches/e%i_m%i_t%i_l%s' \
                     %(PARAMS['NUM_EPOCHS'],
                       PARAMS['MEM_BATCH'],
-                      PARAMS['TRAIN_BATCH'])
+                      PARAMS['TRAIN_BATCH'] * PARAMS['MEM_BATCH'],
+                      str(PARAMS['L_RATE']).replace('.', '-'))
     
         if not os.path.isdir(SAVE_DIR):
             os.mkdir(SAVE_DIR)
@@ -486,6 +492,7 @@ if __name__ == "__main__":
             print('\nEpoch %i: played %i turn(s) and %s' %(epoch+1, turns, 'won!' if won else 'lost...'))
         
         # Train
+        s2 = time.time()
         player.train(PARAMS['MEM_BATCH'],
                      PARAMS['TRAIN_BATCH'], 
                      PARAMS['L_RATE'],

@@ -7,11 +7,10 @@
 '''
 
 IF WANT TO CHANGE BOARD SIZE, FOLLOWING CHANGES NEED TO BE MADE:
- - BOARD, N_PIECES, ROW_RANGE and COL_RANGE
+ - BOARD, ROW_RANGE and COL_RANGE
  - In Game __init__: self.board, self.n_pieces and self.do_first_move stuff
  - In print_board: Indexing (abc and 123)
  - In det game bit: Score appended to det_turnlist
- - SHAPE of network
 
 '''
 
@@ -19,9 +18,8 @@ import numpy as np, random, json, os
 from collections import deque
 
 from WillyNet import WillyNet
-from DW import *
 
-from testSRO import QPlayer, play_cgame, play_hgame
+from test2d import QPlayer as QP_Base, play_cgame
 
 
 ## Game
@@ -37,29 +35,29 @@ LEFT  = ( 0, -1)
 RIGHT = ( 0,  1)
 DIRS = (RIGHT, LEFT, UP, DOWN)
 
-BOARD = [[2, 2,  2, 2, 2, 2, 2,  2, 2],
-         [2, 2,  2, 2, 2, 2, 2,  2, 2],
+BOARD = [[2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
+         [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
 
-         [2, 2,  2, 1, 1, 1, 2,  2, 2],
-         [2, 2,  2, 1, 1, 1, 2,  2, 2],
-         [2, 2,  1, 1, 1, 1, 1,  2, 2],
-         [2, 2,  1, 1, 1, 1, 1,  2, 2],
-         [2, 2,  2, 1, 1, 1, 2,  2, 2],
-         [2, 2,  2, 1, 1, 1, 2,  2, 2],
+         [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+         [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+         [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+         [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+         [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+         [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+         [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
 
-         [2, 2,  2, 2, 2, 2, 2,  2, 2],
-         [2, 2,  2, 2, 2, 2, 2,  2, 2]
+         [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
+         [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2]
          ]
 
-N_PIECES = 22
-
-ROW_RANGE = range(2, 7+1)
-COL_RANGE = {2: range(3, 5+1),
-             3: range(3, 5+1),
-             4: range(2, 6+1),
-             5: range(2, 6+1),
-             6: range(3, 5+1),
-             7: range(3, 5+1)}
+ROW_RANGE = range(2, 8+1)
+COL_RANGE = {2: range(4, 6+1),
+             3: range(4, 6+1),
+             4: range(2, 8+1),
+             5: range(2, 8+1),
+             6: range(2, 8+1),
+             7: range(4, 6+1),
+             8: range(4, 6+1)}
 
 VALID   = True  # Validity of moves
 INVALID = False
@@ -78,21 +76,22 @@ class Game(object):
     
     def __init__(self, do_first_turn = 'fixed'):
         
-        self.board = [[2, 2,  2, 2, 2, 2, 2,  2, 2],
-                      [2, 2,  2, 2, 2, 2, 2,  2, 2],
- 
-                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
-                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
-                      [2, 2,  1, 1, 1, 1, 1,  2, 2],
-                      [2, 2,  1, 1, 1, 1, 1,  2, 2],
-                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
-                      [2, 2,  2, 1, 1, 1, 2,  2, 2],
- 
-                      [2, 2,  2, 2, 2, 2, 2,  2, 2],
-                      [2, 2,  2, 2, 2, 2, 2,  2, 2]
+        self.board = [[2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
+                      
+                      [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+                      [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+                      [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+                      [2, 2,  1, 1, 1, 1, 1, 1, 1,  2, 2],
+                      [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 1, 1, 1, 2, 2,  2, 2],
+                      
+                      [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2],
+                      [2, 2,  2, 2, 2, 2, 2, 2, 2,  2, 2]
                       ]
         
-        self.n_pieces = N_PIECES
+        self.n_pieces = 33
         
         if do_first_turn not in ('no', 'fixed', 'rand'):
             raise ValueError('Argument `do_first_turn` must be one of "no", "fixed" or "rand".')
@@ -102,8 +101,7 @@ class Game(object):
             self.board[4][4] = FREE
             self.n_pieces -= 1
         elif self.do_first_turn == 'rand':
-            move = random.choice(((4, 4), (5, 4))) #,
-#                                  (2, 4), (7, 4)))
+            move = random.choice(((4, 4), (4, 6), (6, 4), (6, 6)))
             self.board[move[0]][move[1]] = FREE
             self.n_pieces -= 1
         
@@ -171,27 +169,68 @@ class Game(object):
             self.__init__(self.do_first_turn)
 
 
-## Convolutional QPlayer
-## ~~~~~~~~~~~~~~~~~~~~~
+## (Q-)Player
+## ~~~~~~~~~~
 
-class ConvQPlayer(QPlayer):
+class QPlayer(QP_Base):
     
-    def __init__(self, max_mem_len, disc_rate, shape):
+    def __init__(self, *args):
         
-        self.max_mem_len = max_mem_len
-        self.disc_rate = disc_rate
+        super().__init__(*args)
+        self.trains = 0
+    
+    def get_action(self, state, at_random, legal_moves):
         
-        self.memory = deque()
+        lm_inds = np.where(legal_moves)[0]
         
-        self.network = DeepWilly('quadratic')
-        for willy in willies:
-            self.network.add(willy['class'](*willy['args']))
+        if at_random:
+            ret = random.choice(lm_inds)
+            #print(' - Random choice from', np.where(legal_moves)[0], 'was', ret)
+            return ret
         
+        else:
+            ret = self.network.predict(np.array([state]))
+            #print(' - Find max of', ret, 'in inds', lm_inds, end = '\n   -> ')
+            ret = ret[0, lm_inds]
+            #print(ret, ':', ret.argmax() : lm_inds[ret.argmax()])
+            return lm_inds[ret.argmax()]
+    
+    def train(self, batch_size, l_rate, reg_rate, mom_rate):
+        
+        self.trains += 1
+        
+        # Get batch
+        if batch_size < len(self.memory):
+            batch = np.array(random.sample(self.memory, batch_size))
+        else:
+            batch = self.memory
+        
+        # Build examples and targets
+        examples = []
+        targets = []
+        for state, action, reward, new_state, crashed, legal_moves in batch:
+            
+            # Build target
+            target = self.network.predict(np.array([state]))[0] 
+            target *= legal_moves
+            
+            target[action] = reward
+
+            if not crashed:
+                target[action] += self.disc_rate * max(self.network.predict(np.array([new_state]))[0])
+
+            # Append to lists
+            examples.append(state)
+            targets.append(target)
+            
+        # Train
+        self.network.train(np.array(examples), np.array(targets),
+                           l_rate, 1, reg_rate, 1, mom_rate)
 
 
 
-## Print board (for hgame)
-## ~~~~~~~~~~~
+## Play game (human)
+## ~~~~~~~~~
 
 def print_board(game):
     
@@ -199,7 +238,7 @@ def print_board(game):
 
     pi = 0
     for ri, row in enumerate(game.board):
-        st += '  abcdef  '[ri] + ' '
+        st += '  abcdefg  '[ri] + ' '
         for slot in row:
             st += ' '
             if slot == WALL:
@@ -209,7 +248,7 @@ def print_board(game):
                 pi += 1
         st += '\n'
 
-    st += '\n       1 2 3 4 5     \n\n'
+    st += '\n       1 2 3 4 5 6 7     \n\n'
 
     print(st)
 
@@ -256,7 +295,43 @@ def play_hgame(game):
         print('\n   Congratulations!\n')
     else:
         print('\n   Shame... Try again!\n')
+    
+    
+    
 
+## Play game (computer)
+## ~~~~~~~~~
+
+def play_cgame(game, player, epsilon, rand_start = False):
+    
+    game.restart(rand_start)
+    
+    hist = ''
+    turns = 0
+    new_state = game.get_state()
+    while not (game.crashed or game.won):
+        
+        #print('Turn', turns, 'w lms', game.lms)
+        #print_board(game)
+        
+        # Play turn
+        state = new_state
+        lms = game.lms
+        action = player.get_action(state, 
+                                   random.random() < epsilon,
+                                   lms)
+        reward = game.turn(action)
+        new_state = game.get_state()
+
+        turns += 1
+        
+        # Store in memory
+        player.store(state, action, reward, new_state, game.crashed, lms)
+        
+        # History
+        hist += str(action) + ' '
+    
+    return turns, game.won, hist
 
 
 ## Do RL
@@ -274,45 +349,47 @@ if __name__ == "__main__":
     
     ## Params
     ## ~~~~~~
-    
-    PLAYER_CLASS = QPlayer
-    SHAPE = [N_PIECES, 
-             600, 400, 
+
+    SHAPE = [33, 
+             400, 400, 
              len(Game._moves)]
 
     DISC_RATE = 0.95
     MAX_MEM_LEN = 1000
 
-    MEM_BATCH = 150
-    TRAIN_BATCH = 1/5
-    
-    L_RATE = 0.02 * MEM_BATCH * TRAIN_BATCH
+    BATCH_SIZE = 70
+    L_RATE = 0.02
     REG_RATE = 0.0001
     MOM_RATE = 0.8
 
-    NUM_EPOCHS = 30000
+    NUM_EPOCHS = 1000
     EPSILON = lambda i: 1.3 - i/NUM_EPOCHS
 
-    VERBOSE = 25
-    DET_VERBOSE = 50
-    RAND_DETS = False
-    
-    SAVE_DIR = 'testMRO_saves/MRO2/batches/e%i_m%i_t%i_l%s' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH * MEM_BATCH, str(L_RATE).replace('.', '-'))
-    if not os.path.isdir(SAVE_DIR):
-        os.mkdir(SAVE_DIR)
-        os.mkdir(SAVE_DIR + '/checkpoints')
+    VERBOSE = 10
+    DET_VERBOSE = 20
     
     
     game = Game()
     
     
-    # Play human game(s)
-    # ~~~~~~~~~~~~~~~~~~
+    # Play game - human
+    # ~~~~~~~~~~~~~~~~~
     
-    play = input('Enter anything to play the game: ')
-    while play != '':
-        play_hgame(game)
-        play = input('Enter anything to play again: ')
+    if input('Enter anything to play the game: ') != '':
+        
+        print('\nWelcome to the game. Each turn, press 0, 1, 2, 3 to move to the right, left, up or down, respectively. Objective is to reach the food(x) with your player (A), without falling off the map or into a pit (O).')
+        
+        while True:
+            
+            play_hgame(game)
+                
+            if game.won:
+                print('\nCongrats! You won :)')
+            else:
+                print('\nOh no! You lost :(')
+            
+            if input('Enter anything to play again: ') == '':
+                break
     
     
     # Reinforcement learning
@@ -326,15 +403,14 @@ if __name__ == "__main__":
     print('Parameters:',
           '\n - discount rate       =', DISC_RATE,
           '\n - max memory len      =', MAX_MEM_LEN, '\n',
-          '\n - memory batch size   =', MEM_BATCH,
-          '\n - training batch size =', TRAIN_BATCH, '\n',
+          '\n - batch size          =', BATCH_SIZE,
           '\n - learning rate       =', L_RATE,
           '\n - regularisation rate =', REG_RATE,
           '\n - momentum rate       =', MOM_RATE, '\n',
           '\n - epochs              =', NUM_EPOCHS, 
           '\n - epsilon(i)          = 1.3 - i/epochs', '\n')
     
-    player = PLAYER_CLASS(MAX_MEM_LEN, DISC_RATE, SHAPE)
+    player = QPlayer(MAX_MEM_LEN, DISC_RATE, SHAPE)
     
     turnlist = []
     winlist = []
@@ -357,15 +433,14 @@ if __name__ == "__main__":
             print('\nEpoch %i: played %i turn(s) and %s' %(epoch+1, turns, 'won!' if won else 'lost...'))
         
         # Train
-        player.train(MEM_BATCH, TRAIN_BATCH, 
-                     L_RATE, REG_RATE, MOM_RATE)
+        player.train(BATCH_SIZE, L_RATE, REG_RATE, MOM_RATE)
         
         # If right epoch, play deterministic game
         if (epoch+1) % DET_VERBOSE == 0:
             
             #print('\n\n\n\n\n\n\n\nDET GAME\n\n\n\n\n\n\n\n\n\n')
             
-            turns, won, this_hist = play_cgame(game, player, -1, RAND_DETS)
+            turns, won, this_hist = play_cgame(game, player, -1, False)
             
             print('\n  Played a deterministic game %i minutes into training.\n  Lasted %i turns and %s' \
                   %((time.time() - start_time) / 60,
@@ -378,49 +453,15 @@ if __name__ == "__main__":
                 print('           PLAYED THE SAME GAME!!!')
             last_hist = this_hist
             
-            det_turnlist.append(N_PIECES-1 - turns)
+            det_turnlist.append(32 - turns)
             det_winlist.append(won)
             
-        # Every 1000 epochs, plot and save net
-        if (epoch+1) % 1000 == 0:
-            
-            fig, ax = plt.subplots()
-
-            for i in range(len(det_winlist)):
-                ax.plot(i * DET_VERBOSE, det_turnlist[i], 
-                        'g.' if det_winlist[i] else 'r.',
-                        markersize = 1)
-
-            ax.set_xlabel('Epoch')
-            ax.set_ylabel('Pieces Left')
-            ax.set_title('RL Progress - Epoch %i' %(epoch+1))
-
-            text = 'learn: %0.4f \n' \
-                   'reg: %0.4f \n' \
-                   'mom: %0.2f \n' \
-                   'm batch: %i \n' \
-                   't batch: %i \n\n' \
-                   'time: %0.1f mins' \
-                    % (L_RATE, REG_RATE, MOM_RATE, 
-                       MEM_BATCH, TRAIN_BATCH * MEM_BATCH,
-                       (end_time - start_time)/60)
-
-            ax.text(0.98, 0.98, text,
-                    transform = ax.transAxes, fontsize = 9,
-                    verticalalignment = 'top',
-                    horizontalalignment = 'right')
-            
-            #try: plt.close()
-            plt.show(block = False)
-            plt.savefig(SAVE_DIR + '/progress_%i.pdf' %(epoch+1))
-            
-            player.network.save(SAVE_DIR + '/network_%i.json' %(epoch+1))
+            #input('PE.')
     
-    end_time = time.time()
     print('\nDone running RL! Saving...')
     
     # All done, save network and turn list and stuff
-    player.network.save(SAVE_DIR + '/network.json')
+    player.network.save('testRO_saves/network.json')
     
     data = {'turnlist': turnlist,
             'winlist': winlist,
@@ -428,16 +469,15 @@ if __name__ == "__main__":
             'det_winlist': det_winlist,
             'params': {'DISC_RATE': DISC_RATE,
                        'MAX_MEM_LEN': MAX_MEM_LEN,
-                       'MEM_BATCH': MEM_BATCH,
-                       'TRAIN_BATCH': TRAIN_BATCH,
+                       'BATCH_SIZE': BATCH_SIZE,
                        'L_RATE': L_RATE,
                        'REG_RATE': REG_RATE,
                        'MOM_RATE': MOM_RATE,
                        'NUM_EPOCHS': NUM_EPOCHS,
-                       'DET_VERBOSE': DET_VERBOSE},
-            'time': end_time - start_time}
+                       'DET_VERBOSE': DET_VERBOSE}
+            }
     
-    file = open(SAVE_DIR + '/results.json', 'w')
+    file = open('testRO_saves/results.json', 'w')
     json.dump(data, file)
     file.close()
     
@@ -451,18 +491,14 @@ if __name__ == "__main__":
                 markersize = 1)
     
     ax.set_xlabel('Epoch')
-    ax.set_ylabel('Pieces Left')
+    ax.set_ylabel('Turns Played')
     ax.set_title('RL Progress')
     
     text = 'learn: %0.4f \n' \
            'reg  : %0.4f \n' \
            'mom  : %0.2f \n' \
-           'm batch: %i \n' \
-           't batch: %i \n\n' \
-           'time: %0.1f mins' \
-            % (L_RATE, REG_RATE, MOM_RATE, 
-               MEM_BATCH, TRAIN_BATCH * MEM_BATCH,
-               (end_time - start_time)/60)
+           'batch: %i \n' \
+            % (L_RATE, REG_RATE, MOM_RATE, BATCH_SIZE)
 
     ax.text(0.98, 0.98, text,
             transform = ax.transAxes, fontsize = 9,
@@ -470,10 +506,14 @@ if __name__ == "__main__":
             horizontalalignment = 'right')
     
     plt.show(block = False)
-    plt.savefig(SAVE_DIR + '/progress.pdf')
+    plt.savefig('testRO_saves/progress.pdf')
     input('PE.')
     plt.close()
+            
         
+        
+        
+    
     
     
     

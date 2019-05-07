@@ -168,7 +168,7 @@ class WillyNet(object):
     def predict(self, X, pred_type = 'as is'):
         ''' Predicts the output given input and weights. 
             Returns the index of neuron in output layer with highest activation. '''
-
+        
         X = np.array(X)
         self.forward_prop(X)
         
