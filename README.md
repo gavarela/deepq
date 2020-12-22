@@ -1,26 +1,27 @@
 # deepq
 
-Teaching an AI to play the game peg solitaire using deep Q reinforcement learning. Here's a sneak peak of a trained AI playing a smaller version of the game:
+Teaching an AI to play the game peg solitaire using deep Q reinforcement learning. 
+
+The game is simple. There is a board with spots arranged in a large cross. At the beginning, every spot but one has a marble in it. The aim is to remove all but one marble from the board. This is done by moving marbles _over_ each other, thereby removing the one that was jumped over. More info here: https://www.wikiwand.com/en/Peg_solitaire.
+
+Here's a sneak peak of a trained AI playing a smaller version of the game, for an idea of how the game looks:
 
 ![Alt Text](https://github.com/gavarela/deepq/blob/master/images/Solved%20MRO2.gif)
 
-(I'm cleaning up code and running the full (large) version of the game. Expect full updates before the end of 2020, likely around Christmas.)
-
-
-## Intro & Files
-
-The game is simple. There is a board with spots arranged in a lareg cross. At the beginning, every spot but one has a piece in it. The aim is to remove all but one piece from the board. This is done by moving pieces _over_ each other, thereby removing the piece that was 'jumped'. See the gif above for an idea. More info here: https://www.wikiwand.com/en/Peg_solitaire
+If you want to play the game, I implemented it in pygame and you can play it by cloning the repository locally and running the file `play/ROGame.py`.
 
 The name in the files, Remain One, is a direct translation from the Portuguese name of the game, which started as a joke and now would be kind of impractical to change so it stays.
+
+(I'm cleaning up code and running the learning routine on the full-sized version of the game. Expect full updates before the end of 2020, likely around Christmas.)
 
 
 ## Reinforcement Learning and Deep Q Learning
 
 Traditional supervised learning is useful for teaching AI to make decisions in scenarios where there is a correct decision we already know and want to emulate, e.g. classifying images, estimating values. Getting AI to make decisions in a situation where there is no ready repository of known decisions to learn from needs a whole different learning paradigm. This is the case of learning how to play a game.
 
-We'll depict the game we want to play as a black box that articulates interactions between an environment (the game) and an actor (the player). The environment has a given state (in our case, the distribution of pieces on the board) and the actor chooses an action (a move) based on this state. This action both changes the state of the environment (removes a piece and changes location of moved piece) and, for the purposes of the algorithm, elicits a reward. We code this reward so that it depends on both the action and the state. The same action can be worth more in some states than others. In our case, the reward is just inversely proportional to the number of pieces on the board. That way, removing a piece is _better_ later in the game, when there's fewer pieces remaining.
+We'll depict the game we want to play as a black box that articulates interactions between an environment (the game) and an actor (the player). The environment has a given state (in our case, the distribution of marbles on the board) and the actor chooses an action (a move) based on this state. This action both changes the state of the environment (removes a marble and changes location of another) and, for the purposes of the algorithm, elicits a reward. We code this reward so that it depends on both the action and the state. The same action can be worth more in some states than others. In our case, the reward is just inversely proportional to the number of marbles on the board. That way, removing a marble is _better_ later in the game, when there's fewer remaining.
 
-The game goes on for many such state-action-new state periods until it's either beat or it crashes (the player lost). In chess, for example, the state is the board configuration (piece positions) and an action is a movement of a piece; this movement changes the board configuration (state) and may or may not elicit a reward (points for removing an opposing piece).
+The game goes on for many such state-action-new state periods until it's either beat or it crashes (the player lost). In chess, for example, the state is the board configuration (positions of the pieces) and an action is a movement of a piece; this movement changes the board configuration (state) and may or may not elicit a reward (points for removing an opposing piece).
 
 So at each turn, the actor should choose the action it thinks will elicit most reward _in the long term_, considering the future states resulting from the current action. To mimick human action, we have the actor value the present more than the future (i.e. discount the future). That is, if _r(s, a)_ is the reward from acting on state _s_ with action _a_, the actor wants to maximise
 
@@ -42,7 +43,7 @@ So we'll let our player play the game, with random behaviour at first so it can 
 There are a few aspects of peg solitaire that make it tricky to teach an AI using reinforcement learning.
 
 The first is that to win the game, we have to play a _perfect_ game, not just a good one. The algorithm is trained to maximise the discounted sum of rewards so if over the course of learning, the actor doesn't get to 'experience' many perfect game, it may well learn to attain a high number of points and stop there, content. There are a few things I implemented to counteract this:
-- I made the rewards increase convexly as the number of pieces left at the end of each turn falls. The idea is that by valueing removing the _last_ piece so much more than removing a piece near the beginning or middle of the game, the actor will weigh it's memories of playing long games more heavily when learning
+- I made the rewards increase convexly as the number of marbles left at the end of each turn falls. The idea is that by valueing removing the _last_ marble so much more than removing a marble near the beginning or middle of the game, the actor will weigh it's memories of playing long games more heavily when learning
 - I set the discount rate high (close to 1) so that it values points it'll get in future actions in the same game as much as current ones
 - I made sure the actor plays a LOT of fully random games at first. Since it won't know how to play the game, if we let the actor choose their own actions at first, it will never actually play a full game and won't have that in it's memory to learn. _Slowly_, as it learns, the actor plays more and more games non-randomly and hopefully this slow change helps get more full games into its memory
 
