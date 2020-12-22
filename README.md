@@ -76,8 +76,8 @@ This is a description of an old version of the algorithm I'm using. Will update 
    
    b) Update network's prediction of _{Q(s, a)}_ using its prediction on s' and the observed reward of acting a on s:
          
-         <a href="https://www.codecogs.com/eqnedit.php?latex=Q(s,&space;a)&space;\to&space;r(s,&space;a)&space;&plus;&space;\gamma&space;\max_{a'}&space;Q(s',&space;a')" target="_blank"><img src="https://latex.codecogs.com/gif.latex?Q(s,&space;a)&space;\to&space;r(s,&space;a)&space;&plus;&space;\gamma&space;\max_{a'}&space;Q(s',&space;a')" title="Q(s, a) \to r(s, a) + \gamma \max_{a'} Q(s', a')" /></a>Rowwise on memory batch, do the first two steps described in 2c above to generate a larger training sample
-   
+   <a href="https://www.codecogs.com/eqnedit.php?latex=Q(s,&space;a)&space;\to&space;r(s,&space;a)&space;&plus;&space;\gamma&space;\max_{a'}&space;Q(s',&space;a')" target="_blank"><img src="https://latex.codecogs.com/gif.latex?Q(s,&space;a)&space;\to&space;r(s,&space;a)&space;&plus;&space;\gamma&space;\max_{a'}&space;Q(s',&space;a')" title="Q(s, a) \to r(s, a) + \gamma \max_{a'} Q(s', a')" /></a>
+
    c) Train network using _s_ as the input and the above updated prediction for _{Q(s, a)}_ as the output, forcing the network to continuously update its own predictions; 
 
 4. Go back to step 2. Every few repetitions of steps 2 and 3, track actor's progress by making it play a game fully non-randomly and storing the number of turns it lasted. This is just step 2 with non-random actions.
