@@ -183,15 +183,11 @@ class QPlayer(QP_Base):
         
         if at_random:
             ret = random.choice(lm_inds)
-            #print(' - Random choice from', np.where(legal_moves)[0], 'was', ret)
             return ret
         
         else:
             ret = self.network.predict(np.array([state]))
-            #print(' - Find max of', ret, 'in inds', lm_inds, end = '\n   -> ')
-            ret = ret[0, lm_inds]
-            #print(ret, ':', ret.argmax() : lm_inds[ret.argmax()])
-            return lm_inds[ret.argmax()]
+            return lm_inds[ret[0, lm_inds].argmax()]
     
     def train(self, mem_batch, batch_prop, 
               l_rate, reg_rate, mom_rate):
@@ -370,21 +366,21 @@ if __name__ == "__main__":
     DISC_RATE = 0.95
     MAX_MEM_LEN = 1000
 
-    MEM_BATCH = 70
-    TRAIN_BATCH = 10
+    MEM_BATCH = 30
+    TRAIN_BATCH = 1/3
     
     L_RATE = 0.02
     REG_RATE = 0.0001
     MOM_RATE = 0.8
 
-    NUM_EPOCHS = 500
+    NUM_EPOCHS = 750
     EPSILON = lambda i: 1.3 - i/NUM_EPOCHS
 
-    VERBOSE = 1
-    DET_VERBOSE = 2
-    RAND_DETS = False
+    VERBOSE = NUM_EPOCHS+1
+    DET_VERBOSE = 10
+    RAND_DETS = True
     
-    SAVE_DIR = 'testSRO_saves/new_batch/e%i_m%i_t%i' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH)
+    SAVE_DIR = 'testSRO_saves/new_batch/e%i_m%i_t%i' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH * MEM_BATCH)
     if not os.path.isdir(SAVE_DIR):
         os.mkdir(SAVE_DIR)
     
@@ -450,8 +446,9 @@ if __name__ == "__main__":
             
             turns, won, this_hist = play_cgame(game, player, -1, RAND_DETS)
             
-            print('\n  Played a deterministic game %i minutes into training.\n  Lasted %i turns and %s' \
+            print('\n  Played a deterministic game %i minutes (%i epochs) into training.\n  Lasted %i turns and %s' \
                   %((time.time() - start_time) / 60,
+                    epoch+1,
                     turns,
                     'won!' if won else 'lost...')
                  )
@@ -499,7 +496,7 @@ if __name__ == "__main__":
                 markersize = 1)
     
     ax.set_xlabel('Epoch')
-    ax.set_ylabel('Turns Played')
+    ax.set_ylabel('Pieces left')
     ax.set_title('RL Progress')
     
     text = 'learn  : %0.4f \n' \

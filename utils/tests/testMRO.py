@@ -261,21 +261,28 @@ if __name__ == "__main__":
     DISC_RATE = 0.95
     MAX_MEM_LEN = 1000
 
-    MEM_BATCH = 150
+    MEM_BATCH = 250
     TRAIN_BATCH = 1/5
     
     L_RATE = 0.5 # 0.02 * MEM_BATCH * TRAIN_BATCH
-    REG_RATE = 0.0001
+    REG_RATE = 0.001
     MOM_RATE = 0.8
 
-    NUM_EPOCHS = 3000
+    NUM_EPOCHS = 10000
     EPSILON = lambda i: 1.3 - i/NUM_EPOCHS
 
-    VERBOSE = 25
-    DET_VERBOSE = 50
-    RAND_DETS = False
+    VERBOSE = NUM_EPOCHS+1 # not verbose
+    DET_VERBOSE = 150
+    RAND_DETS = True
     
-    SAVE_DIR = 'testMRO_saves/batches/e%i_m%i_t%i_l%s' %(NUM_EPOCHS, MEM_BATCH, TRAIN_BATCH * MEM_BATCH, str(L_RATE).replace('.', '-'))
+    SAVE_DIR = 'testMRO_saves/batches/e%i mb%i tb%i lr%s rr%s mr%s%s' \
+        %(NUM_EPOCHS, 
+          MEM_BATCH, 
+          TRAIN_BATCH * MEM_BATCH,
+          str(L_RATE).replace('.', '-'),
+          str(REG_RATE).replace('.', '-'),
+          str(MOM_RATE).replace('.', '-'),
+          ' rand' if RAND_DETS else '')
     if not os.path.isdir(SAVE_DIR):
         os.mkdir(SAVE_DIR)
     
@@ -304,7 +311,7 @@ if __name__ == "__main__":
           '\n - discount rate       =', DISC_RATE,
           '\n - max memory len      =', MAX_MEM_LEN, '\n',
           '\n - memory batch size   =', MEM_BATCH,
-          '\n - training batch size =', TRAIN_BATCH, '\n',
+          '\n - training batch size =', TRAIN_BATCH * MEM_BATCH, '\n',
           '\n - learning rate       =', L_RATE,
           '\n - regularisation rate =', REG_RATE,
           '\n - momentum rate       =', MOM_RATE, '\n',
@@ -342,8 +349,9 @@ if __name__ == "__main__":
             
             turns, won, this_hist = play_cgame(game, player, -1, RAND_DETS)
             
-            print('\n  Played a deterministic game %i minutes into training.\n  Lasted %i turns and %s' \
+            print('\n  Played a deterministic game %i minutes (%i epochs) into training.\n  Lasted %i turns and %s' \
                   %((time.time() - start_time) / 60,
+                    epoch+1,
                     turns,
                     'won!' if won else 'lost...')
                  )

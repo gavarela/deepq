@@ -310,17 +310,21 @@ def save_progress(turnlist, winlist,
     ax.set_ylabel('Pieces Left')
     ax.set_title('RL Progress')
 
-    text = 'learn: %0.4f \n' \
-           'reg: %0.4f \n' \
-           'mom: %0.2f \n' \
+    text = 'games/epoch: %i \n\n' \
+           'm length: %i \n' \
            'm batch: %i \n' \
            't batch: %i \n\n' \
+           'learn: %0.4f \n' \
+           'reg: %0.4f \n' \
+           'mom: %0.2f \n\n' \
            'time: %0.1f mins' \
-            % (params['L_RATE'],
-               params['REG_RATE'],
-               params['MOM_RATE'], 
+            % (params['GAMES_PER_EPOCH'],
+               params['MAX_MEM_LEN'],
                params['MEM_BATCH'],
                params['TRAIN_BATCH'] * params['MEM_BATCH'],
+               params['L_RATE'],
+               params['REG_RATE'],
+               params['MOM_RATE'], 
                time_elapsed/60)
 
     ax.text(0.98, 0.98, text,
@@ -352,7 +356,7 @@ if __name__ == "__main__":
     ## ~~~~~~
     
     PLAYER_CLASS = QPlayer
-    LOAD_FROM = 'testMRO_saves/MRO2/batches/e75000_m150_t75_l0-5'
+    LOAD_FROM = None #'testMRO_saves/MRO2/batches/e75000_m150_t75_l0-5'
     
     if LOAD_FROM is not None:
         
@@ -387,25 +391,31 @@ if __name__ == "__main__":
         
         # Params
         PARAMS = {'DISC_RATE': 0.95,
-                  'MAX_MEM_LEN': 1000,
+                  'MAX_MEM_LEN': 2500,
 
-                  'MEM_BATCH': 150,
-                  'TRAIN_BATCH': 1/2,
+                  'MEM_BATCH': 300,
+                  'TRAIN_BATCH': 1/5,
 
                   'REG_RATE': 0.0001,
                   'MOM_RATE': 0.8,
 
                   'NUM_EPOCHS': 50000,
-                  'DET_VERBOSE': 50,
+                  'GAMES_PER_EPOCH': 5,
+                  
+                  'DET_VERBOSE': 150,
                   'RAND_DETS': False}
         
         PARAMS['L_RATE'] = 0.5 # 0.02 * PARAMS['MEM_BATCH'] * PARAMS['TRAIN_BATCH']
         
-        SAVE_DIR = 'testMRO_saves/MRO2/batches/e%i_m%i_t%i_l%s' \
-                    %(PARAMS['NUM_EPOCHS'],
-                      PARAMS['MEM_BATCH'],
-                      PARAMS['TRAIN_BATCH'] * PARAMS['MEM_BATCH'],
-                      str(PARAMS['L_RATE']).replace('.', '-'))
+        SAVE_DIR = 'testMRO_saves/MRO2/batches/e%ik g%i mb%i tb%i lr%s rr%s mr%s %srand' \
+            %(PARAMS['NUM_EPOCHS']/1e3,
+              PARAMS['GAMES_PER_EPOCH'],
+              PARAMS['MEM_BATCH'],
+              PARAMS['TRAIN_BATCH'] * PARAMS['MEM_BATCH'],
+              str(PARAMS['L_RATE']).replace('.', '-'),
+              str(PARAMS['REG_RATE']).replace('.', '-'),
+              str(PARAMS['MOM_RATE']).replace('.', '-'),
+              '' if PARAMS['RAND_DETS'] else 'no')
     
         if not os.path.isdir(SAVE_DIR):
             os.mkdir(SAVE_DIR)
@@ -430,18 +440,18 @@ if __name__ == "__main__":
     EPSILON = lambda i: 1.3 - i/PARAMS['NUM_EPOCHS']
     
     SAVE_EVERY = 1000
-    VERBOSE = 25
+    VERBOSE = PARAMS['NUM_EPOCHS']+1
     
     game = Game()
     
     
-    # Play human game(s)
-    # ~~~~~~~~~~~~~~~~~~
-    
-    play = input('Enter anything to play the game: ')
-    while play != '':
-        play_hgame(game)
-        play = input('Enter anything to play again: ')
+#    # Play human game(s)
+#    # ~~~~~~~~~~~~~~~~~~
+#    
+#    play = input('Enter anything to play the game: ')
+#    while play != '':
+#        play_hgame(game)
+#        play = input('Enter anything to play again: ')
     
     
     # Reinforcement learning
@@ -468,11 +478,12 @@ if __name__ == "__main__":
     start_time = time.time()
     for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
         
-        # Play a game
-        turns, won, _ = play_cgame(game, player, EPSILON(epoch))
-        
-        turnlist.append(turns)
-        winlist.append(game.won)
+        # Play games
+        for game_i in range(1 + (PARAMS['GAMES_PER_EPOCH']-1) * max(0, min(1, round(EPSILON(epoch))))):
+            turns, won, _ = play_cgame(game, player, EPSILON(epoch))
+
+            turnlist.append(turns)
+            winlist.append(game.won)
         
         if (epoch+1) % VERBOSE == 0:
             print('\nEpoch %i: played %i turn(s) and %s' %(epoch+1, turns, 'won!' if won else 'lost...'))
@@ -490,8 +501,9 @@ if __name__ == "__main__":
             
             turns, won, this_hist = play_cgame(game, player, -1, PARAMS['RAND_DETS'])
             
-            print('\n  Played a deterministic game %i minutes into training.\n  Lasted %i turns and %s' \
+            print('\n  Played a deterministic game %i minutes (%i epochs) into training.\n  Lasted %i turns and %s' \
                   %((time.time() - start_time) / 60,
+                    epoch+1,
                     turns,
                     'won!' if won else 'lost...')
                  )
@@ -514,6 +526,7 @@ if __name__ == "__main__":
                           player,
                           SAVE_DIR+'/checkpoints', 
                           name_end = '_%i' %(epoch+1))
+            plt.close()
             
     
     end_time = time.time()
@@ -526,6 +539,7 @@ if __name__ == "__main__":
                   time_base + end_time - start_time,
                   player,
                   SAVE_DIR)
+    plt.close()
     
     input('PE.')
     plt.close()
