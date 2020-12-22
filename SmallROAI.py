@@ -238,7 +238,7 @@ RL.learn(epochs = param_epochs,
 print('Trained and saved.')
 
 # Save
-file = open('saves/last_run.json', 'w')
+file = open(param_savedir + '/last_run.json', 'w')
 data = {'turn_list': RL.turn_list,
         'det_turn_list': RL.det_turn_list}
 json.dump(data, file)

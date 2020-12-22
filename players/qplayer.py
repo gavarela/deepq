@@ -5,9 +5,9 @@
 import numpy as np
 from .memory import *
 
-import keras
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
+#import keras
+#from keras.models import Sequential
+#from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
 
 from utils.DW import *
 from utils.WillyNet import *
@@ -145,8 +145,7 @@ class QPlayer(object):
             
             self.net_save = self.network.save
     
-    def get_move(self, state, random_state, legal_moves,
-                 **kwargs):
+    def get_move(self, state, random_state, legal_moves):
         ''' Selects move with highest predicted Q-value given the state from legal moves. If random_state is True, chooses randomly with predicted Q-values as the probability distribution.'''
         
         # Q-values for each move
@@ -225,7 +224,7 @@ class QPlayer(object):
         
         # Update targets for training examples in batch
         targets = self.net_predict(examples)
-        old_fp = np.copy(targets)
+        if verbose: old_fp = np.copy(targets)
         
         for u, unit in enumerate(train_set):
             

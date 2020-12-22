@@ -2,59 +2,57 @@
 #  Reinforcement Learning Routine
 ## ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-''' 
-
-Depict game we want to play as a black box. It has a given state, you give it an action and it returns you a reward that depends on both the action and the state. The state changes and you repeat until the game ends (terminal state).
-
-Idea is that the network predicts the Q-value of each action given a state. The Q-value is a sort of value/utility of the action (a) given the state (s):
-    Q(s, a) = Sum_t y^t * r_t = r(s, a) + y * max_a'{Q(s', a')}
-where r(s, a) is the immediate reward of action a in state s (Bellman equation).
-
-We can thus pick actions by running the network on a given state and choosing the action with highest Q(s, a).
-
-While playing game, we update the training examples and retrain the network to optimise the prediction. We add some random behaviour in order to allow the player to 'explore' the game (otherwise it repeats the actions it thinks are optimal over and over and can get stuck in a local minimum). The idea is that this iteration should make the network's estimate of Q(s, a) near the true Q(s, a).
-
-I modified traditional Q-learning here by implementing a routine with a main 'master' network/player and a set of supplemental 'player' networks/players. The player networks are initialised to match the master network and play a series of games in parallel, training on each game they play after it ends. After a set number of games are played in parallel this way, the master network trains on their combined memoriesa and the process is repeated (starting from reinitialising the player networks). The idea behind this is not only that it should speed up training by playing games in parallel but that by having the player networks brach out, the games will be qualitatively different, allowing more of the game to be explored and then used to train the master network.
-
-'''
 
 import types, random, numpy as np, time
+from rlroutine import *
+from players.qplayer import *
 
 import multiprocessing as mp
 from pathos.multiprocessing import ProcessPool
 
-class RLRoutine(object):
+
+## Random Player
+## ~~~~~~~~~~~~~
+
+class RandPlayer(QPlayer):
     
-    def __init__(self, cgame_class, player_class,
-                 epsilon, disc_rate, max_memory_len,
-                 use_keras = True, conv_net = True, 
-                 l_rate = None, momentum = None,
-                 filename = None):
-        ''' Initialises QPlayer and its network and stores parameters. '''
+    def __init__(self, max_memory_len): 
         
-        # Parameters
-        if not isinstance(cgame_class, type):
-            raise TypeError('Argument cgame_class must be a class (not an instance).')
+        self.memory = Memory(max_memory_len)
+    
+    def start_network(self, in_shape, n_outputs,
+                      use_keras = True, conv_net = True, 
+                      l_rate = None, momentum = None): None
+    
+    def load_network(self, filename, use_keras = True): None
+    
+    def get_move(self, state, random_state, legal_moves):
         
-        if not isinstance(player_class, type):
-            raise TypeError('Argument player_class must be a class (not an instance).')
+        return np.random.choice(np.where(legal_moves == 1)[0])
+    
+    def train(self, train_set_size, batch_size, l_rate, 
+              reg_rate = 0.01, mom_rate = 0.85,
+              use_last = False, verbose = False): None
+    
+    def set_net_funcs(self, use_keras):
         
-        self.cgame_class = cgame_class
-        self.player_class = player_class
-        self.epsilon = epsilon          # Function of epoch
-        
-        # Player
-        self.master = self.player_class(disc_rate, max_memory_len, 'Master')
-        if filename is None:
+        self.net_train = lambda trainX, trainy, num_iterations, batch_size, l_rate, mom_rate, reg_rate: None
+    
+        self.net_predict = lambda x: None
             
-            in_shape, n_outputs = self.cgame_class.get_inp_out_dims(for_keras = use_keras, twod = conv_net)
-            
-            self.master.start_network(in_shape, n_outputs,
-                                      use_keras, conv_net,
-                                      l_rate, momentum)
-        else:
-            self.master.load_network(filename)
-        
+        self.net_cost = lambda testX, testy: None
+
+        self.net_copy = None
+
+        self.net_save = None
+
+
+
+## RL Routine
+## ~~~~~~~~~~
+
+class TTT_RL(RLRoutine):
+    
     def play_cgames(self, player, num_games, epsilon,
                     train = True,
                     l_rate = None, reg_rate = None, mom_rate = None):
@@ -68,17 +66,8 @@ class RLRoutine(object):
             
             cgame = self.cgame_class()
 
-            # First turn - remove d4
-            ''' This is the only game (RemainOne) specific piece of code. Change eventually once things are working. '''
-            action = self.cgame_class.get_inp_out_dims()[1]//2
-            cgame.first_turn(action)
-
-            new_state = cgame.get_state(for_keras = player.using_keras,
-                                        twod = player.conv_net)
-            
-            #print(player.id + ' played first turn of game ' + str(game) + '.')
-            
-            # Loop over next turns
+            # Loop over turns
+            new_state = cgame.get_state(for_keras = player.using_keras, twod = player.conv_net)
             turns = 0
             while not cgame.is_done():
 
@@ -94,14 +83,12 @@ class RLRoutine(object):
 
                 # Play turn
                 reward = cgame.turn(action)
-                new_state = cgame.get_state(for_keras = player.using_keras,
-                                            twod = player.conv_net)
+                new_state = cgame.get_state(for_keras = player.using_keras, twod = player.conv_net)
 
                 # Store in temp memory
                 player.store(state, action, reward, new_state, cgame.done, legal_moves)
 
                 turns += 1
-                #print(player.id + ' played turn ' + str(turns) + ' of game ' + str(game) + '.')
                 
             # Train on game that just ended
             if train:
@@ -117,21 +104,58 @@ class RLRoutine(object):
             
         return player, cgames, turnlist
     
-    def init_players(self, n_players):
-        ''' Initialises list of qplayers identical to the main one. '''
+    def test_games(self, num_games):
         
-        self.players = []
-        for i in range(n_players):
+        rand_agent = RandPlayer(self.master.memory.max_len)
+        
+        winlist = []
+        losslist = []
+        turnlist = []
+        for game in range(num_games):
             
-            self.players.append(self.player_class(self.master.disc_rate,
-                                                  self.master.memory.max_len,
-                                                  'Player '+str(i)))
+            cgame = self.cgame_class()
+
+            # Loop over next turns
+            new_state = cgame.get_state(for_keras = self.master.using_keras, twod = self.master.conv_net)
+            play = random.choice([0, 1])
+            turns = 0
+            win = 0
+            loss = 0
+            while not cgame.is_done():
+                
+                turn_player = self.master if play % 2 == 0 else rand_agent
+                
+                # Get action
+                state = new_state
+                legal_moves = cgame.legal_moves()
+
+                action = turn_player.get_move(
+                            state,
+                            random.random() < -1,
+                            legal_moves
+                         )
+
+                # Play turn
+                reward = cgame.turn(action)
+                new_state = cgame.get_state(for_keras = self.master.using_keras, twod = self.master.conv_net)
+
+                # Store in master's memory
+                self.master.store(state, action, reward, new_state, cgame.done, legal_moves)
+                
+                # End iteration
+                if play % 2 == 0:
+                    win += reward
+                else:
+                    loss += reward
+                play += 1
+                turns += 1
+                
+            # Append number of turns
+            turnlist.append(turns)
+            winlist.append(win)
+            losslist.append(loss)
             
-            self.players[-1].network = self.master.net_copy()
-            self.players[-1].set_net_funcs(self.master.using_keras)
-            self.players[-1].n_outputs = self.master.n_outputs
-            self.players[-1].conv_net = self.master.conv_net
-            self.players[-1].using_keras = self.master.using_keras
+        return turnlist, winlist, losslist
     
     def learn(self, epochs, batch_size, 
               player_life, train_players = True,
@@ -155,6 +179,8 @@ class RLRoutine(object):
         self.turn_list = []
         
         self.det_turn_list = []
+        self.det_win_list = []
+        self.det_loss_list = []
         
         self.init_players(n_players)
         pool = ProcessPool(n_players)
@@ -202,14 +228,15 @@ class RLRoutine(object):
             if (epoch+1) % verbose == 0:
                 
                 verbose_time = time.time()
-                print('\nDeterministic game, %i mins into training:' % ((verbose_time-start_time)/60), end = ' ')
+                print('\n10 deterministic games, %i mins into training:' % ((verbose_time-start_time)/60), end = ' ')
                 
-                _, cgame, turns = self.play_cgames(self.master, 1, 0, False)
-                #self.master.memory.clear()
+                turns, wins, losses = self.test_games(10)
                 
-                print('lasted %i turns' % turns[0])
-                #print('average %i turns with longest run %i turns.' % (sum(turns)/len(turns), max(turns)))
+                print(':\n  mean turns: %0.1f\n  max turns: %i\n  number wins: %i\n  number losses: %i' % (np.mean(turns), max(turns), sum(wins), sum(losses)))
+                #print('average %0.1f turns with longest run %i turns.' % (sum(turns)/len(turns), max(turns)))
                 self.det_turn_list += turns
+                self.det_win_list += wins
+                self.det_loss_list += losses
             
             # Save master network
             if (epoch+1) % save_every == 0:

@@ -54,16 +54,15 @@ class WillyNet(object):
         elif problem == 'classification':
             self.o_act = lambda z: 1 / (1 + np.exp(-z))
             self.cost = -np.mean(np.nan_to_num(y*np.log(a)) + np.nan_to_num((1-y)*np.log(1-a)))
-        
-        #elif problem == 'softmax':
-            #self.o_act = lambda z: np.exp(-z)/np.sum(np.exp(-z), axis = 1)
-            #self.cost = lambda a, y: -np.sum(np.log(a*y), axis = 1)
-            # NEED TO CHECK THE ABOVE BEFORE USING!!!
+        elif problem == 'softmax':
+            # For classification only.
+            self.o_act = lambda z: np.exp(z)/(np.sum(np.exp(z), axis = 1).reshape((-1, 1)) + 1e-99)
+            self.cost = lambda a, y: -np.sum(np.log(a*y), axis = 1)
         
     def forward_prop(self, X):
         ''' Given X, performs a forward propagation. Calculates activation of each layer up to output layer. '''
         
-        X = np.array(X)
+        #X = np.array(X) # don't think we need this...
         n_samples = X.shape[0]
         
         self.Z = [np.tile(self.B[0], (n_samples, 1)) + (X @ self.W[0])]
@@ -78,17 +77,18 @@ class WillyNet(object):
         
         return np.array(self.A[-1])
 
-    def backward_prop(self, X, y):
+    def backward_prop(self, X, y, W):
         ''' Backward propagates the errors given the batch of training labels, y. 
             dZ is dC/dZ and dW and dB are dC/dW and dC/dB. 
-            Specific to cross-entropy cost and ReLU hidden activations and sigmoid output activations. '''
+            Relies on output activation / cost being one of:
+            linear/quadratic, sigmoid/cross-entropy, softmax/log. '''
         
         n_samples = X.shape[0]
         
         XA = [X] + self.A
         
         # Output layer
-        dZ = [(1/n_samples) * (XA[-1] - y)]
+        dZ = [(1/n_samples) * (XA[-1] - y) * W]
         
         dW = [XA[-1-1].transpose() @ dZ[-1]]
         dB = [np.sum(dZ[-1], axis = 0)]
@@ -104,31 +104,39 @@ class WillyNet(object):
         return dW, dB
     
     @staticmethod
-    def get_batches(X, y, batch_size):
+    def get_batches(X, y, W, batch_size):
         ''' Shuffles training data and gets random batch of desired size. '''
         
         if batch_size == -1 or batch_size >= X.shape[0]:
-            return [X], [y]
+            return [X], [y], [W]
         
         # Shuffle data
         shuffled_indices = np.random.permutation(len(X))
         shuffled_X = X[shuffled_indices]
         shuffled_y = y[shuffled_indices]
+        shuffled_W = W[shuffled_indices]
 
         # Get batch of desired size
         X_batches = []
         y_batches = []
+        W_batches = []
         for i in range(X.shape[0]//batch_size):
             X_batches.append(shuffled_X[int(batch_size*i):int(batch_size*(i+1))])
             y_batches.append(shuffled_y[int(batch_size*i):int(batch_size*(i+1))])
+            W_batches.append(shuffled_W[int(batch_size*i):int(batch_size*(i+1))])
         
-        return X_batches, y_batches
+        return X_batches, y_batches, W_batches
 
     def train(self, X, y, 
-              learn_rate, batch_size, reg_rate, num_iterations, mom_rate = 0,
+              num_iterations, batch_size,
+              learn_rate, reg_rate, mom_rate = 0,
+              weights = None,
               verbose = False):
         ''' Builds network, trains using given data and training parameters. 
             Regularisation is L2. '''
+        
+        # Handle weights
+        W = weights if weights is not None else np.ones_like(y)
         
         # Initialise momenta to 0
         vW = []
@@ -141,15 +149,15 @@ class WillyNet(object):
         for iteration in range(num_iterations):
             
             # Get batches
-            X_batches, y_batches = self.get_batches(X, y, batch_size)
+            X_batches, y_batches, W_batches = self.get_batches(X, y, W, batch_size)
             
-            for batchX, batchy in zip(X_batches, y_batches):
+            for batchX, batchy, batchW in zip(X_batches, y_batches, W_batches):
                 
                 # Forward propagate
                 self.forward_prop(batchX)
 
                 # Backward propagate
-                dW, dB = self.backward_prop(batchX, batchy)
+                dW, dB = self.backward_prop(batchX, batchy, batchW)
 
                 # Update weights
                 vW = [mom_rate * vw + (1 - mom_rate) * dw for vw, dw in zip(vW, dW)]

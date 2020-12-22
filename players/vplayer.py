@@ -19,15 +19,7 @@ Let's give it a shot!
 '''
 
 import numpy as np
-from .memory import *
 from .qplayer import *
-
-import keras
-from keras.models import Sequential
-from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
-
-from utils.DW import *
-from utils.WillyNet import *
 
 
 class VPlayer(QPlayer):
@@ -41,8 +33,7 @@ class VPlayer(QPlayer):
                               use_keras, conv_net,
                               l_rate, momentum)
         
-    def get_move(self, state, random_state, legal_moves,
-                **kwargs):
+    def get_move(self, state, random_state, legal_moves):
         ''' Selects move from legal_moves whose future state has the highest predicted value. If random_state is true, chooses randomly with the predicted values as the probability distribution. '''
         
         # Get attainable future states
@@ -69,6 +60,12 @@ class VPlayer(QPlayer):
             
             return legal_moves[np.argmax(next_state_values)]
         
+    def store(self, state, action, reward, new_state, crash, legal_moves):
+        ''' Don't need action or legal_moves. '''
+        
+        self.memory.append([state, reward, new_state, crash],
+                          multiple = False)
+    
     def train(self, train_set_size, batch_size, l_rate, 
               reg_rate = 0.01, mom_rate = 0.85,
               use_last = False, verbose = False):
@@ -94,13 +91,11 @@ class VPlayer(QPlayer):
         # Training examples and targets
         examples = np.array(list(train_set[:, 0]))
         
-        rewards = np.array(list(train_set[:, 2]))[:, None]
-        next_states = np.array(list(train_set[:, 3]))
-        crashed = np.array(list(train_set[:, 4]))[:, None]
+        rewards = np.array(list(train_set[:, 1]))[:, None]
+        next_states = np.array(list(train_set[:, 2]))
+        crashed = np.array(list(train_set[:, 3]))[:, None]
         
         targets = (rewards + self.disc_rate * self.net_predict(next_states)) * crashed
-        
-        #print('\nIn VPlayer train, shapes of rewards, next_states, predicted_vals, crashed and targets:', rewards.shape, next_states.shape, self.net_predict(next_states).shape, crashed.shape, targets.shape)
         
         # Train
         if verbose: old_fp = self.net_predict(examples)
