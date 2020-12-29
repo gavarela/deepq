@@ -6,7 +6,7 @@ The game is simple. There is a board with spots arranged in a large cross. At th
 
 Here's a sneak peak of a trained AI playing a smaller version of the game, for an idea of how the game looks:
 
-![Alt Text](https://github.com/gavarela/deepq/blob/master/images/Solved%20MRO2.gif)
+![Alt Text](https://github.com/gavarela/deepq/blob/master/images/RO3.gif)
 
 If you want to play the game, I implemented it in pygame and you can play it by cloning the repository locally and running the file `play/ROGame.py`.
 
@@ -89,7 +89,7 @@ The result should be an actor whose network properly predicts Q-values given sta
 
 Here's a plot of the actor learning to play the game shown in the gif above:
 
-![MRO2 Progress](https://github.com/gavarela/deepq/blob/master/images/MRO2.jpg)
+![MRO2 Progress](https://github.com/gavarela/deepq/blob/master/images/RO3.jpg)
 
 
 ## Tests
