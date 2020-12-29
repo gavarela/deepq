@@ -1,0 +1,15 @@
+# Ignore saves
+saves/*
+
+# Ignore nano.save
+# (contains python shell code that works on string output)
+nano.save
+
+# Ignore any __pycache__ files
+__pycache__*
+*/__pycache__*
+
+* Ignore hidden stuff
+.DS_Store
+*/.DS_Store
+
