@@ -45,7 +45,7 @@ if __name__ == "__main__":
     ## ~~~~~~~~~~~
     
     PLAYER_CLASS = QPlayer
-    DIRNAME = 'testMRO_saves/RO/test2'
+    DIRNAME = 'testMRO_saves/RO/test3'
         # ^ DO NOT ADD '/' to end!
     
     # Get params
@@ -102,29 +102,25 @@ if __name__ == "__main__":
         CURRENT_EPOCH = 0
     
     else:
-        
-        # Get latest (current) epoch
-        matches = [[m for m in re.finditer('_(\d+)\.', file)] for file in filenames]
-        numbers = [int(match[0].group(1)) if len(match) > 0 else -1 for match in matches]
-        CURRENT_EPOCH = max(numbers)
 
         # Get progress data
-        file = open(DIRNAME + '/checkpoints/results_%i.json' %CURRENT_EPOCH, 'r')
-        data = json.load(file)
-        file.close()
-
+        with open(DIRNAME + '/checkpoints/results_temp.json', 'r') as file:
+            data = json.load(file)
+        
         turnlist = data['turnlist']
         winlist = data['winlist']
 
         det_turnlist = data['det_turnlist']
         det_winlist = data['det_winlist']
-
+        
+        CURRENT_EPOCH = len(det_turnlist)*PARAMS['DET_VERBOSE']
+        
         time_base = data['time']
         
         # Set up player
         player = PLAYER_CLASS(PARAMS['MAX_MEM_LEN'],
                           PARAMS['DISC_RATE'],
-                          DIRNAME + '/checkpoints/network_%i.json' %CURRENT_EPOCH)
+                          DIRNAME + '/checkpoints/network_temp.json')
     
     # Final stuff
     EPSILON = lambda i: sum([PARAMS['EPSILON'][j] * i**j \
