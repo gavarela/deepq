@@ -7,7 +7,7 @@
 
 Reads parameters and progress data from json files, 
 does setup (initialise classes, etc.)
-and finally runs the RL routine.
+and runs the RL routine.
 
 '''
 
@@ -37,10 +37,8 @@ DIRNAME = sys.argv[1].rstrip('/')
 with open(DIRNAME + '/params.json', 'r') as file:
     PARAMS = json.load(file)
 
-EPSILON = lambda i: sum([PARAMS['EPSILON'][j] * i**j \
-                         for j in range(len(PARAMS['EPSILON']))])
-L_RATE = lambda i: sum([PARAMS['L_RATE'][j] * i**j \
-                         for j in range(len(PARAMS['L_RATE']))])
+EPSILON = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['EPSILON'], PARAMS['NUM_EPOCHS'])
+L_RATE  = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['L_RATE'],  PARAMS['NUM_EPOCHS'])
 
 game = game.Game(PARAMS['BOARD_SIZE'])
 PLAYER_CLASS = getattr(players, PARAMS['PLAYER_TYPE'])
@@ -114,18 +112,6 @@ print('Training via RL')
 print('~~~~~~~~~~~~~~~')
 print('\033[0m')
 
-l_str = ''.join([(str(PARAMS['L_RATE'][i]) if i == 0 \
-                  else ' + '+str(PARAMS['L_RATE'][i]) if PARAMS['L_RATE'][i]>=0 else \
-                  ' - '+str(-PARAMS['L_RATE'][i])) + \
-                 ('' if i==0 else ' i' if i==1 else ' i^'+str(i)) \
-                 for i in range(len(PARAMS['L_RATE']))])
-
-e_str = ''.join([(str(PARAMS['EPSILON'][i]) if i == 0 \
-                  else ' + '+str(PARAMS['EPSILON'][i]) if PARAMS['EPSILON'][i]>=0 else \
-                  ' - '+str(-PARAMS['EPSILON'][i])) + \
-                 ('' if i==0 else ' i' if i==1 else ' i^'+str(i)) \
-                 for i in range(len(PARAMS['EPSILON']))])
-
 print('Board size: %i/5' %(PARAMS['BOARD_SIZE']+1), '\n\n',
       
       'Parameters:',
@@ -137,12 +123,12 @@ print('Board size: %i/5' %(PARAMS['BOARD_SIZE']+1), '\n\n',
       '\n - memory batch size   :', PARAMS['MEM_BATCH'],
       '\n - training batch size :', PARAMS['TRAIN_BATCH'], '\n',
       
-      '\n - learning rate (i)   :', l_str,
+      '\n - learning rate (i)   :', PARAMS['L_RATE'],
       '\n - regularisation rate :', PARAMS['REG_RATE'],
       '\n - momentum rate       :', PARAMS['MOM_RATE'], '\n',
       
       '\n - epochs              :', PARAMS['NUM_EPOCHS'], 
-      '\n - epsilon(i)          :', e_str,
+      '\n - epsilon(i)          :', PARAMS['EPSILON'],
       '\n - games/epoch (i)     : 1 + %i max(0, min(1, ε(i)))' % (PARAMS['GAMES_PER_EPOCH']-1), 
       '\n')
 
@@ -155,16 +141,16 @@ start_time = time.time()
 for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
 
     # Play games
-    n_games = 1 + (PARAMS['GAMES_PER_EPOCH']-1) * \
-                    round(max(0, min(1, EPSILON(epoch))))
+    n_games = 1 + int(round((PARAMS['GAMES_PER_EPOCH']-1) * \
+                            max(0, min(1, EPSILON[epoch]))))
 
     for i in range(n_games):
-        player.play(game, EPSILON(epoch))
+        player.play(game, EPSILON[epoch])
 
     # Train
     player.train(PARAMS['MEM_BATCH'],
                  PARAMS['TRAIN_BATCH'], 
-                 L_RATE(epoch),
+                 L_RATE[epoch],
                  PARAMS['REG_RATE'],
                  PARAMS['MOM_RATE'])
 
@@ -187,10 +173,9 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
     # Every SAVE_EVERY epochs, plot and save net
     if (epoch+1) % PARAMS['SAVE_EVERY'] == 0:
 
-        save_progress(det_res, 
-                      PARAMS, EPSILON, L_RATE,
+        save_progress(det_res, player.network,
+                      PARAMS, 
                       time_base + time.time() - start_time,
-                      player,
                       DIRNAME, 
                       temp = True)
         plt.close()
@@ -200,11 +185,12 @@ end_time = time.time()
 print('\nDone running RL! Saving...')
 
 # All done, save data and plot
-save_progress(det_res,
-              PARAMS, EPSILON, L_RATE,
-              time_base + end_time - start_time,
-              player,
-              DIRNAME)
+save_progress(det_res, player.network,
+              PARAMS, 
+              time_base + time.time() - start_time,
+              DIRNAME, 
+              epsilon = EPSILON, 
+              lrate = L_RATE)
 #input('Press Enter to close plot and finish.')
 plt.close()
 

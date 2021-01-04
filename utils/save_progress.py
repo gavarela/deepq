@@ -6,22 +6,23 @@ import json
 import matplotlib.pyplot as plt
 
 
-def save_progress(det_res, 
-                  params, epsilon, lrate,
-                  time_elapsed, player,
-                  save_dir, 
-                  temp = False):
+def save_progress(det_res, network, 
+                  params,
+                  time_elapsed,
+                  save_dir,
+                  temp = False,
+                  epsilon = None, lrate = None):
     
     name_end = '_temp' if temp else ''
     
-    # Save params
+    # Save results
     with open(save_dir + '/results%s.json' %name_end, 'w') as file:
         json.dump({'det_res': det_res,
                    'time': time_elapsed}, 
                   file)
     
     # Save network
-    player.network.save(save_dir + '/network%s.json' %name_end)
+    network.save(save_dir + '/network%s.json' %name_end)
     
     # Plot and save progress
     if temp:
@@ -85,17 +86,17 @@ def save_progress(det_res,
         # Smallplots in a row
         epochs = [i * params['DET_VERBOSE'] for i in range(len(det_res))]
 
-        smallax1.plot(epochs, [epsilon(i) for i in epochs],
+        smallax1.plot(epochs, [max(0, min(1, epsilon[i])) for i in epochs],
                       markersize = 1)
         smallax1.set_ylabel('Rand. prob.')
         smallax1.set_ylim([-0.1, 1.1])
 
-        smallax2.plot(epochs, [1 + (params['GAMES_PER_EPOCH']-1) * round(epsilon(i)) for i in epochs],
+        smallax2.plot(epochs, [1 + round((params['GAMES_PER_EPOCH']-1) * epsilon[i]) for i in epochs],
                       markersize = 1)
         smallax2.set_ylabel('Num. games')
         smallax2.set_ylim([0.9, params['GAMES_PER_EPOCH']+0.1])
 
-        smallax3.plot(epochs, [lrate(i) for i in epochs],
+        smallax3.plot(epochs, [lrate[i] for i in epochs],
                       markersize = 1)
         smallax3.set_ylabel('Learn. rate')
         smallax3.set_xlabel('Epoch')
@@ -105,3 +106,4 @@ def save_progress(det_res,
         
     plt.show(block = False)
     plt.savefig(save_dir + '/progress%s.pdf' %name_end)
+    plt.savefig(save_dir + '/progress%s.jpg' %name_end)
