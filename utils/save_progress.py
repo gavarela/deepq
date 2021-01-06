@@ -36,8 +36,26 @@ def save_progress(det_res, network,
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Pieces Left')
         ax.set_title('RL Progress\n'+ \
-                     ('Full-Sized Board' if params['BOARD_SIZE'] in (-1, 4) else \
-                      'Board Size: %i/5' % (params['BOARD_SIZE']+1)))
+                     ('Full-Sized Board' if params['BOARD_SIZE'] == 5 else \
+                      'Board Size: %i/5' % params['BOARD_SIZE']))
+        
+        text = 'ε(i): %s \n' \
+               'learn(i): %s \n\n' \
+               'train batches: %i/%i/%i x%i \n' \
+               'games/i: %i \n' \
+               'reg, mom: %0.4f, %0.2f \n\n' \
+               'time: %0.1f mins' \
+                % (epsilon, lrate,
+                   params['TRAIN_BATCH'], params['MEM_BATCH'], 
+                   params['MAX_MEM_LEN'], params['TRAINS_PER_EPOCH'],
+                   params['GAMES_PER_EPOCH'], 
+                   params['REG_RATE'], params['MOM_RATE'], 
+                   time_elapsed/60)
+                
+        ax.text(0.98, 0.98, text,
+                transform = ax.transAxes, fontsize = 9,
+                verticalalignment = 'top',
+                horizontalalignment = 'right')
     
     else:
         
@@ -62,18 +80,18 @@ def save_progress(det_res, network,
         bigax.set_xlabel('Epoch')
         bigax.set_ylabel('Pieces Left')
         bigax.set_title('RL Progress\n'+ \
-                        ('Full-Sized Board' if params['BOARD_SIZE'] in (-1, 4) else \
-                         'Board Size: %i/5' % (params['BOARD_SIZE']+1)))
+                        ('Full-Sized Board' if params['BOARD_SIZE'] == 5 else \
+                         'Board Size: %i/5' % params['BOARD_SIZE']))
 
         text = 'Net. inner shape: (%s) \n\n' \
-               'Mem. batch: %i/%i \n' \
-               'Train. batch: %i \n\n' \
+               'Batches: %i/%i/%i \n' \
+               'Trains/i: %i \n\n' \
                'Reg. rate: %0.4f \n' \
                'Mom. rate: %0.2f \n\n' \
                'Time: %0.1f mins' \
                 % (', '.join([str(i) for i in params['INNER_SHAPE']]),
-                   params['MEM_BATCH'], params['MAX_MEM_LEN'],
-                   round(params['TRAIN_BATCH'] * params['MEM_BATCH']),
+                   params['TRAIN_BATCH'], params['MEM_BATCH'], params['MAX_MEM_LEN'],
+                   params['TRAINS_PER_EPOCH'],
                    params['REG_RATE'],
                    params['MOM_RATE'], 
                    time_elapsed/60)

@@ -39,6 +39,13 @@ class WillyNet(object):
             self.B = [np.random.normal(0, np.sqrt(2/shape[i]), (1, shape[i+1])) \
                  for i in range(self.n_layers - 1)]
         
+        # Initialise momenta to 0
+        self.vW = []
+        self.vB = []
+        for w, b in zip(self.W, self.B):
+            self.vW.append(np.zeros(w.shape))
+            self.vB.append(np.zeros(b.shape))
+        
         # Hidden layers
         if hidden_act == 'relu':
             self.h_act = lambda z: z * (z>0)
@@ -131,6 +138,7 @@ class WillyNet(object):
               num_iterations, batch_size,
               learn_rate, reg_rate, mom_rate = 0,
               weights = None,
+              reset_mom = False,
               verbose = False):
         ''' Builds network, trains using given data and training parameters. 
             Regularisation is L2. '''
@@ -138,12 +146,13 @@ class WillyNet(object):
         # Handle weights
         W = weights if weights is not None else np.ones_like(y)
         
-        # Initialise momenta to 0
-        vW = []
-        vB = []
-        for w, b in zip(self.W, self.B):
-            vW.append(np.zeros(w.shape))
-            vB.append(np.zeros(b.shape))
+        # Reset momenta if set to
+        if reset_mom:
+            self.vW = []
+            self.vB = []
+            for w, b in zip(self.W, self.B):
+                self.vW.append(np.zeros(w.shape))
+                self.vB.append(np.zeros(b.shape))
         
         # Train over given number of iterations
         for iteration in range(num_iterations):
@@ -160,13 +169,13 @@ class WillyNet(object):
                 dW, dB = self.backward_prop(batchX, batchy, batchW)
 
                 # Update weights
-                vW = [mom_rate * vw + (1 - mom_rate) * dw for vw, dw in zip(vW, dW)]
-                vB = [mom_rate * vb + (1 - mom_rate) * db for vb, db in zip(vB, dB)]
+                self.vW = [mom_rate * vw + (1 - mom_rate) * dw for vw, dw in zip(self.vW, dW)]
+                self.vB = [mom_rate * vb + (1 - mom_rate) * db for vb, db in zip(self.vB, dB)]
 
                 self.W = [w * (1 - reg_rate * learn_rate / batch_size) - learn_rate * vw \
-                          for w, vw in zip(self.W, vW)]
+                          for w, vw in zip(self.W, self.vW)]
                 self.B = [b - learn_rate * vb \
-                          for b, vb in zip(self.B, vB)]
+                          for b, vb in zip(self.B, self.vB)]
 
             # Print progress
             if verbose:

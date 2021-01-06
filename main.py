@@ -40,7 +40,7 @@ with open(DIRNAME + '/params.json', 'r') as file:
 EPSILON = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['EPSILON'], PARAMS['NUM_EPOCHS'])
 L_RATE  = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['L_RATE'],  PARAMS['NUM_EPOCHS'])
 
-game = game.Game(PARAMS['BOARD_SIZE'])
+game = game.Game(PARAMS['BOARD_SIZE']-1)
 PLAYER_CLASS = getattr(players, PARAMS['PLAYER_TYPE'])
 
 # Rename folder if set to
@@ -51,7 +51,7 @@ if PARAMS['RENAME']:
         %(PARAMS['NUM_EPOCHS']/1e3,
           PARAMS['GAMES_PER_EPOCH'],
           PARAMS['MEM_BATCH'],
-          PARAMS['TRAIN_BATCH'] * PARAMS['MEM_BATCH'],
+          PARAMS['TRAIN_BATCH'],
           str(PARAMS['L_RATE']).replace('.', '-'),
           str(PARAMS['REG_RATE']).replace('.', '-'),
           str(PARAMS['MOM_RATE']).replace('.', '-'),
@@ -112,6 +112,9 @@ print('Training via RL')
 print('~~~~~~~~~~~~~~~')
 print('\033[0m')
 
+L_STR = '[' + ', '.join([str(i) for i in PARAMS['L_RATE']])  + ']'
+E_STR = '[' + ', '.join([str(i) for i in PARAMS['EPSILON']]) + ']'
+
 print('Board size: %i/5' %(PARAMS['BOARD_SIZE']+1), '\n\n',
       
       'Parameters:',
@@ -123,12 +126,12 @@ print('Board size: %i/5' %(PARAMS['BOARD_SIZE']+1), '\n\n',
       '\n - memory batch size   :', PARAMS['MEM_BATCH'],
       '\n - training batch size :', PARAMS['TRAIN_BATCH'], '\n',
       
-      '\n - learning rate (i)   :', PARAMS['L_RATE'],
+      '\n - learning rate (i)   :', L_STR,
       '\n - regularisation rate :', PARAMS['REG_RATE'],
       '\n - momentum rate       :', PARAMS['MOM_RATE'], '\n',
       
       '\n - epochs              :', PARAMS['NUM_EPOCHS'], 
-      '\n - epsilon(i)          :', PARAMS['EPSILON'],
+      '\n - epsilon(i)          :', E_STR,
       '\n - games/epoch (i)     : 1 + %i max(0, min(1, ε(i)))' % (PARAMS['GAMES_PER_EPOCH']-1), 
       '\n')
 
@@ -148,11 +151,12 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
         player.play(game, EPSILON[epoch])
 
     # Train
-    player.train(PARAMS['MEM_BATCH'],
-                 PARAMS['TRAIN_BATCH'], 
-                 L_RATE[epoch],
-                 PARAMS['REG_RATE'],
-                 PARAMS['MOM_RATE'])
+    for i in range(PARAMS['TRAINS_PER_EPOCH']):
+        player.train(PARAMS['MEM_BATCH'],
+                     PARAMS['TRAIN_BATCH'], 
+                     L_RATE[epoch],
+                     PARAMS['REG_RATE'],
+                     PARAMS['MOM_RATE'])
 
     # If right epoch, play deterministic game
     if (epoch+1) % PARAMS['DET_VERBOSE'] == 0:
@@ -164,8 +168,7 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
                 (time_base + time.time() - start_time) / 60))
 
         if this_hist == last_hist:
-            print('  PLAYED THE SAME GAME AS LAST TRY!!!')
-            print('  Hist:', this_hist)
+            print('  PLAYED SAME GAME:', this_hist)
         last_hist = this_hist
 
         det_res.append(res)
@@ -174,10 +177,12 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
     if (epoch+1) % PARAMS['SAVE_EVERY'] == 0:
 
         save_progress(det_res, player.network,
-                      PARAMS, 
+                      PARAMS,
                       time_base + time.time() - start_time,
                       DIRNAME, 
-                      temp = True)
+                      temp = True
+                      epsilon = E_STR, 
+                      lrate = L_STR)
         plt.close()
 
 

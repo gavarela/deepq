@@ -29,8 +29,6 @@ class QPlayer(object):
         else:
             
             self.network = WillyNet.load(shape_or_filename)
-
-        self.trains = 0
     
     def store(self, *args):
         
@@ -57,10 +55,8 @@ class QPlayer(object):
             #print(ret, ':', ret.argmax() : lm_inds[ret.argmax()])
             return lm_inds[ret.argmax()]
     
-    def train(self, mem_batch, batch_prop, 
+    def train(self, mem_batch, batch_size, 
               l_rate, reg_rate, mom_rate):
-        
-        self.trains += 1
         
         # Get batch
         if mem_batch < len(self.memory):
@@ -88,8 +84,8 @@ class QPlayer(object):
         # Train
         self.network.train(np.array(examples),
                            np.array(targets),
-                           num_iterations = int(1/batch_prop),
-                           batch_size = int(batch_prop*mem_batch),
+                           num_iterations = 1,
+                           batch_size = batch_size,
                            learn_rate = l_rate,
                            reg_rate = reg_rate,
                            mom_rate = mom_rate)
