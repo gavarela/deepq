@@ -39,16 +39,16 @@ def save_progress(det_res, network,
                      ('Full-Sized Board' if params['BOARD_SIZE'] == 5 else \
                       'Board Size: %i/5' % params['BOARD_SIZE']))
         
-        text = 'ε(i): %s \n' \
-               'learn(i): %s \n\n' \
-               'train batches: %i/%i/%i x%i \n' \
-               'games/i: %i \n' \
-               'reg, mom: %0.4f, %0.2f \n\n' \
+        text = 'train batches: %i/%i/%i x%i \n' \
+               'ε: %s \n' \
+               'learn: %s \n\n' \
+               'reg: %0.4f \n' \
+               'mom: %0.2f \n\n' \
                'time: %0.1f mins' \
-                % (epsilon, lrate,
-                   params['TRAIN_BATCH'], params['MEM_BATCH'], 
+                % (params['TRAIN_BATCH'], params['MEM_BATCH'], 
                    params['MAX_MEM_LEN'], params['TRAINS_PER_EPOCH'],
-                   params['GAMES_PER_EPOCH'], 
+                   str(epsilon[0]) + ' - ' + str(epsilon[-1]), 
+                   str(lrate[0])   + ' - ' + str(lrate[-1]),
                    params['REG_RATE'], params['MOM_RATE'], 
                    time_elapsed/60)
                 
@@ -84,8 +84,7 @@ def save_progress(det_res, network,
                          'Board Size: %i/5' % params['BOARD_SIZE']))
 
         text = 'Net. inner shape: (%s) \n\n' \
-               'Batches: %i/%i/%i \n' \
-               'Trains/i: %i \n\n' \
+               'Train batches: %i/%i/%i x%i \n\n' \
                'Reg. rate: %0.4f \n' \
                'Mom. rate: %0.2f \n\n' \
                'Time: %0.1f mins' \
@@ -102,19 +101,20 @@ def save_progress(det_res, network,
                  horizontalalignment = 'right')
 
         # Smallplots in a row
-        epochs = [i * params['DET_VERBOSE'] for i in range(len(det_res))]
-
-        smallax1.plot(epochs, [max(0, min(1, epsilon[i])) for i in epochs],
+        n_games = [1 + round((params['GAMES_PER_EPOCH']-1) * epsilon[i]) \
+                   for i in range(len(epsilon))]
+        
+        smallax1.plot(list(range(params['NUM_EPOCHS'])), epsilon,
                       markersize = 1)
         smallax1.set_ylabel('Rand. prob.')
         smallax1.set_ylim([-0.1, 1.1])
 
-        smallax2.plot(epochs, [1 + round((params['GAMES_PER_EPOCH']-1) * epsilon[i]) for i in epochs],
+        smallax2.plot(list(range(params['NUM_EPOCHS'])), n_games,
                       markersize = 1)
         smallax2.set_ylabel('Num. games')
-        smallax2.set_ylim([0.9, params['GAMES_PER_EPOCH']+0.1])
+        smallax2.set_ylim([-0.1, params['GAMES_PER_EPOCH']+0.1])
 
-        smallax3.plot(epochs, [lrate[i] for i in epochs],
+        smallax3.plot(list(range(params['NUM_EPOCHS'])), lrate,
                       markersize = 1)
         smallax3.set_ylabel('Learn. rate')
         smallax3.set_xlabel('Epoch')
@@ -122,6 +122,6 @@ def save_progress(det_res, network,
         # Finish up
         fig.tight_layout()
         
-    plt.show(block = False)
     plt.savefig(save_dir + '/progress%s.pdf' %name_end)
     plt.savefig(save_dir + '/progress%s.jpg' %name_end)
+    plt.show(block = False)

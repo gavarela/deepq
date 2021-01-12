@@ -181,8 +181,8 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
                       time_base + time.time() - start_time,
                       DIRNAME, 
                       temp = True
-                      epsilon = E_STR, 
-                      lrate = L_STR)
+                      epsilon = EPSILON, 
+                      lrate = L_RATE)
         plt.close()
 
 
