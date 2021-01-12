@@ -41,7 +41,7 @@ class QPlayer(object):
         
     def remember(self, mem_prop):
         
-        self.long_term_mem += deque(islice(self.memory, 0, mem_prop*self.max_mem_len))
+        self.long_term_mem += deque(islice(self.memory, 0, int(mem_prop*self.max_mem_len)))
         
         for i in range(mem_prop*self.max_mem_len):
             self.memory.popleft()
