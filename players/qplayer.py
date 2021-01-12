@@ -8,6 +8,7 @@ if "../" not in sys.path:
 
 import numpy as np, random
 from collections import deque
+from itertools import islice
 
 from utils.WillyNet import WillyNet
 
@@ -20,6 +21,7 @@ class QPlayer(object):
         self.disc_rate = disc_rate
 
         self.memory = deque()
+        self.long_term_mem = deque()
 
         if isinstance(shape_or_filename, list):
             
@@ -32,12 +34,17 @@ class QPlayer(object):
     
     def store(self, *args):
         
-        item = list(args)
-        
-        if len(self.memory) == self.max_mem_len:
+        if len(self.memory) + len(self.long_term_mem) == self.max_mem_len:
             self.memory.popleft()
         
-        self.memory.append(item)
+        self.memory.append(list(args))
+        
+    def remember(self, mem_prop):
+        
+        self.long_term_mem += deque(islice(self.memory, 0, mem_prop*self.max_mem_len))
+        
+        for i in range(mem_prop*self.max_mem_len):
+            self.memory.popleft()
     
     def get_action(self, state, at_random, legal_moves):
         
@@ -45,14 +52,11 @@ class QPlayer(object):
         
         if at_random:
             ret = random.choice(lm_inds)
-            #print(' - Random choice from', np.where(legal_moves)[0], 'was', ret)
             return ret
         
         else:
             ret = self.network.predict(np.array([state]))
-            #print(' - Find max of', ret, 'in inds', lm_inds, end = '\n   -> ')
             ret = ret[0, lm_inds]
-            #print(ret, ':', ret.argmax() : lm_inds[ret.argmax()])
             return lm_inds[ret.argmax()]
     
     def train(self, mem_batch, batch_size, 
@@ -60,9 +64,9 @@ class QPlayer(object):
         
         # Get batch
         if mem_batch < len(self.memory):
-            batch = np.array(random.sample(self.memory, mem_batch))
+            batch = np.array(random.sample(self.memory+self.long_term_mem, mem_batch))
         else:
-            batch = np.array(self.memory)
+            batch = np.array(self.memory+self.long_term_mem)
         
         # Build examples and targets
         state, action, reward, new_state, crashed, legal_moves = \

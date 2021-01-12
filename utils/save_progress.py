@@ -69,7 +69,6 @@ def save_progress(det_res, network,
         bigax = fig.add_subplot(gs[:, :-2])
         smallax1 = fig.add_subplot(gs[0, -2:])
         smallax2 = fig.add_subplot(gs[1, -2:])
-        smallax3 = fig.add_subplot(gs[2, -2:])
 
         # Plot progress (main axis)
         for i in range(len(det_res)):
@@ -100,24 +99,17 @@ def save_progress(det_res, network,
                  verticalalignment = 'top',
                  horizontalalignment = 'right')
 
-        # Smallplots in a row
-        n_games = [1 + round((params['GAMES_PER_EPOCH']-1) * epsilon[i]) \
-                   for i in range(len(epsilon))]
-        
+        # Plot epsilon (small axis)
         smallax1.plot(list(range(params['NUM_EPOCHS'])), epsilon,
                       markersize = 1)
         smallax1.set_ylabel('Rand. prob.')
         smallax1.set_ylim([-0.1, 1.1])
 
-        smallax2.plot(list(range(params['NUM_EPOCHS'])), n_games,
+        # Plot learning rate (small axis)
+        smallax2.plot(list(range(params['NUM_EPOCHS'])), lrate,
                       markersize = 1)
-        smallax2.set_ylabel('Num. games')
-        smallax2.set_ylim([-0.1, params['GAMES_PER_EPOCH']+0.1])
-
-        smallax3.plot(list(range(params['NUM_EPOCHS'])), lrate,
-                      markersize = 1)
-        smallax3.set_ylabel('Learn. rate')
-        smallax3.set_xlabel('Epoch')
+        smallax2.set_ylabel('Learn. rate')
+        smallax2.set_xlabel('Epoch')
 
         # Finish up
         fig.tight_layout()

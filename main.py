@@ -40,33 +40,12 @@ with open(DIRNAME + '/params.json', 'r') as file:
 EPSILON = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['EPSILON'], PARAMS['NUM_EPOCHS'])
 L_RATE  = interp(list(range(PARAMS['NUM_EPOCHS'])), PARAMS['L_RATE'],  PARAMS['NUM_EPOCHS'])
 
+if not isinstance(PARAMS['LTERM_PROPS'], list) and isinstance(PARAMS['LTERM_TIMES'], list):
+    PARAMS['LTERM_PROPS'] = [PARAMS['LTERM_PROPS'] for i in range(len(PARAMS['LTERM_TIMES']))]
+PARAMS['LTERM_TIMES'] += [2]
+
 game = game.Game(PARAMS['BOARD_SIZE']-1)
 PLAYER_CLASS = getattr(players, PARAMS['PLAYER_TYPE'])
-
-# Rename folder if set to
-if PARAMS['RENAME']:
-
-    NEW_DIRNAME = DIRNAME.split('/')
-    NEW_DIRNAME[-1] = 'e%ik g%i mb%i tb%i lr%s rr%s mr%s %srand' \
-        %(PARAMS['NUM_EPOCHS']/1e3,
-          PARAMS['GAMES_PER_EPOCH'],
-          PARAMS['MEM_BATCH'],
-          PARAMS['TRAIN_BATCH'],
-          str(PARAMS['L_RATE']).replace('.', '-'),
-          str(PARAMS['REG_RATE']).replace('.', '-'),
-          str(PARAMS['MOM_RATE']).replace('.', '-'),
-          '' if PARAMS['RAND_DETS'] else 'no')
-    NEW_DIRNAME = '/'.join(NEW_DIRNAME)
-
-    os.rename(DIRNAME, NEW_DIRNAME)
-    DIRNAME = NEW_DIRNAME
-
-    PARAMS['RENAME'] = False
-    with open(DIRNAME + '/params.json', 'w') as file:
-        json.dump(PARAMS, file)
-
-else: 
-    DIRNAME = DIRNAME
 
 # Setup player and network (from checkpoint, if applicable)
 filenames = os.listdir(DIRNAME)
@@ -108,33 +87,26 @@ else:
 ## ~~~~~~~~~~~~
 
 print('\033[32m')
-print('Training via RL')
-print('~~~~~~~~~~~~~~~')
-print('\033[0m')
-
-L_STR = '[' + ', '.join([str(i) for i in PARAMS['L_RATE']])  + ']'
-E_STR = '[' + ', '.join([str(i) for i in PARAMS['EPSILON']]) + ']'
-
-print('Board size: %i/5' %(PARAMS['BOARD_SIZE']+1), '\n\n',
+print('Board size: %i/5' %PARAMS['BOARD_SIZE'], '\n\n',
       
       'Parameters:',
       '\n - network inner shape :', PARAMS['INNER_SHAPE'], '\n',
       
       '\n - discount rate       :', PARAMS['DISC_RATE'],
-      '\n - max memory len      :', PARAMS['MAX_MEM_LEN'], '\n',
+      '\n - max memory len      :', PARAMS['MAX_MEM_LEN'], 
+      '\n - lterm memory props  :', str(PARAMS['LTERM_PROPS']), 
+      '\n - lterm memory times  :', str(PARAMS['LTERM_TIMES']), '\n',
       
       '\n - memory batch size   :', PARAMS['MEM_BATCH'],
       '\n - training batch size :', PARAMS['TRAIN_BATCH'], '\n',
       
-      '\n - learning rate (i)   :', L_STR,
+      '\n - learning rate (i)   :', str(PARAMS['L_RATE']),
       '\n - regularisation rate :', PARAMS['REG_RATE'],
       '\n - momentum rate       :', PARAMS['MOM_RATE'], '\n',
       
       '\n - epochs              :', PARAMS['NUM_EPOCHS'], 
-      '\n - epsilon(i)          :', E_STR,
-      '\n - games/epoch (i)     : 1 + %i max(0, min(1, ε(i)))' % (PARAMS['GAMES_PER_EPOCH']-1), 
-      '\n')
-
+      '\n - epsilon(i)          :', str(PARAMS['EPSILON']), '\n')
+print('\033[0m')
 
 ## Reinforcement learning
 ## ~~~~~~~~~~~~~~~~~~~~~~
@@ -143,12 +115,8 @@ last_hist = ''
 start_time = time.time()
 for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
 
-    # Play games
-    n_games = 1 + int(round((PARAMS['GAMES_PER_EPOCH']-1) * \
-                            max(0, min(1, EPSILON[epoch]))))
-
-    for i in range(n_games):
-        player.play(game, EPSILON[epoch])
+    # Play game
+    player.play(game, EPSILON[epoch])
 
     # Train
     for i in range(PARAMS['TRAINS_PER_EPOCH']):
@@ -157,6 +125,12 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
                      L_RATE[epoch],
                      PARAMS['REG_RATE'],
                      PARAMS['MOM_RATE'])
+    
+    # If right epoch, commit some prop of memory to long term mem
+    if (epoch+1) == int(PARAMS['NUM_EPOCHS']*PARAMS['LTERM_TIMES'][0]):
+        player.remember(PARAMS['LTERM_PROPS'][0])
+        PARAMS['LTERM_TIMES'] = PARAMS['LTERM_TIMES'][1:]
+        PARAMS['LTERM_PROPS'] = PARAMS['LTERM_PROPS'][1:]
 
     # If right epoch, play deterministic game
     if (epoch+1) % PARAMS['DET_VERBOSE'] == 0:
@@ -180,7 +154,7 @@ for epoch in range(CURRENT_EPOCH, PARAMS['NUM_EPOCHS']):
                       PARAMS,
                       time_base + time.time() - start_time,
                       DIRNAME, 
-                      temp = True
+                      temp = True,
                       epsilon = EPSILON, 
                       lrate = L_RATE)
         plt.close()
@@ -201,6 +175,7 @@ plt.close()
 
 # Remove temp files
 os.remove(DIRNAME + '/progress_temp.pdf')
+os.remove(DIRNAME + '/progress_temp.jpg')
 os.remove(DIRNAME + '/network_temp.json')
 os.remove(DIRNAME + '/results_temp.json')
     
