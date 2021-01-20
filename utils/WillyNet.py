@@ -169,10 +169,12 @@ class WillyNet(object):
                 dW, dB = self.backward_prop(batchX, batchy, batchW)
 
                 # Update weights
-                self.vW = [mom_rate * vw + (1 - mom_rate) * dw for vw, dw in zip(self.vW, dW)]
-                self.vB = [mom_rate * vb + (1 - mom_rate) * db for vb, db in zip(self.vB, dB)]
+                self.vW = [mom_rate * vw + (1 - mom_rate) * (dw + w * reg_rate/batch_size) \
+                           for vw, dw, w in zip(self.vW, dW, self.W)]
+                self.vB = [mom_rate * vb + (1 - mom_rate) *  db \
+                           for vb, db, b in zip(self.vB, dB, self.B)]
 
-                self.W = [w * (1 - reg_rate * learn_rate / batch_size) - learn_rate * vw \
+                self.W = [w - learn_rate * vw \
                           for w, vw in zip(self.W, self.vW)]
                 self.B = [b - learn_rate * vb \
                           for b, vb in zip(self.B, self.vB)]
