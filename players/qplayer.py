@@ -8,7 +8,6 @@ if "../" not in sys.path:
 
 import numpy as np, random
 from collections import deque
-from itertools import islice
 
 from utils.WillyNet import WillyNet
 
@@ -41,10 +40,9 @@ class QPlayer(object):
         
     def remember(self, mem_prop):
         
-        self.long_term_mem += deque(islice(self.memory, 0, int(mem_prop*self.max_mem_len)))
-        
-        for i in range(mem_prop*self.max_mem_len):
-            self.memory.popleft()
+        for i in range(int(mem_prop * self.max_mem_len)):
+            self.long_term_mem.append(self.memory.popleft())
+            
     
     def get_action(self, state, at_random, legal_moves):
         
