@@ -6,7 +6,7 @@ The game is simple. There is a board with spots arranged in a large cross. At th
 
 Here's a sneak peak of a trained AI playing a smaller version of the game, for an idea of how the game looks:
 
-![Alt Text](https://github.com/gavarela/deepq/blob/master/images/RO3.gif)
+![Alt Text](https://github.com/gavarela/deepq/blob/master/images/RO4.gif)
 
 If you want to play the game, I implemented it in pygame and you can play it by cloning the repository locally and running the file `play/ROGame.py`.
 
@@ -52,8 +52,6 @@ A second issue is that the game is fully deterministic, i.e. there's a fear the 
 
 ## The Algorithm
 
-This is a description of an old version of the algorithm I'm using. Will update it...
-
 1. Initialise the class instances:
 
    a) The game (a class which provides a state, takes in an action and returns a reward);
@@ -65,9 +63,10 @@ This is a description of an old version of the algorithm I'm using. Will update 
    a) Run a lottery to see if action will be random or if we'll allow the actor to pick the best action based on its network. This lottery will be initially biased towards random action and progressively loosened.
    
    b) If random, pick a random action. If we'll let the actor pick the move,
-   
-      i. run network on current state;
-      ii. pick action with highest predicted Q-value;
+      
+      - run network on current state;
+      
+      - pick action with highest predicted Q-value;
    
    c) Store old state, chosen action, the reward and the new state (inc. an indicator for whether the game ended, _c_) in memory: _(s, a, r, s', c)_;
 
@@ -89,7 +88,7 @@ The result should be an actor whose network properly predicts Q-values given sta
 
 Here's a plot of the actor learning to play the game shown in the gif above:
 
-![MRO2 Progress](https://github.com/gavarela/deepq/blob/master/images/RO3.jpg)
+![MRO4 Progress](https://github.com/gavarela/deepq/blob/master/images/RO4.jpg)
 
 
 ## Tests
