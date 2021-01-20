@@ -15,10 +15,8 @@ from players.qplayer import QPlayer
 
 class nQPlayer(QPlayer):
     
-    def train(self, mem_batch, batch_prop, 
+    def train(self, mem_batch, batch_size, 
               l_rate, reg_rate, mom_rate):
-        
-        self.trains += 1
         
         # Get batch
         if mem_batch < len(self.memory):
@@ -42,8 +40,8 @@ class nQPlayer(QPlayer):
         # Train
         self.network.train(np.array(examples),
                            np.array(targets),
-                           num_iterations = int(1/batch_prop),
-                           batch_size = int(batch_prop*mem_batch),
+                           num_iterations = 1,
+                           batch_size = batch_size,
                            learn_rate = l_rate,
                            reg_rate = reg_rate,
                            mom_rate = mom_rate)
